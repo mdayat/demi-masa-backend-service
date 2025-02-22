@@ -1,17 +1,17 @@
 package services
 
-import "github.com/mdayat/demi-masa/configs"
+import (
+	"github.com/mdayat/demi-masa/configs"
+)
 
 type AuthServicer interface{}
 
 type auth struct {
-	env configs.Env
-	db  configs.Db
+	configs configs.Configs
 }
 
-func NewAuthService(env configs.Env, db configs.Db) AuthServicer {
+func NewAuthService(configs configs.Configs) AuthServicer {
 	return &auth{
-		env: env,
-		db:  db,
+		configs: configs,
 	}
 }

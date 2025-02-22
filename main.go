@@ -30,7 +30,12 @@ func main() {
 		logger.Fatal().Err(err).Send()
 	}
 
-	rest := internal.NewRestService(env, db)
+	rest := internal.NewRestService(configs.Configs{
+		Env:      env,
+		Db:       db,
+		Validate: configs.NewValidate(),
+	})
+
 	if err := rest.Start(); err != nil {
 		logger.Fatal().Err(err).Send()
 	}

@@ -21,16 +21,14 @@ type RestServicer interface {
 }
 
 type rest struct {
-	router *chi.Mux
-	env    configs.Env
-	db     configs.Db
+	configs configs.Configs
+	router  *chi.Mux
 }
 
-func NewRestService(env configs.Env, db configs.Db) RestServicer {
+func NewRestService(configs configs.Configs) RestServicer {
 	return &rest{
-		router: chi.NewRouter(),
-		env:    env,
-		db:     db,
+		configs: configs,
+		router:  chi.NewRouter(),
 	}
 }
 
@@ -42,7 +40,7 @@ func (r rest) Start() error {
 	r.router.Use(httprate.LimitByIP(100, 1*time.Minute))
 
 	options := cors.Options{
-		AllowedOrigins:   strings.Split(r.env.AllowedOrigins, ","),
+		AllowedOrigins:   strings.Split(r.configs.Env.AllowedOrigins, ","),
 		AllowedMethods:   []string{"GET", "PUT", "POST", "DELETE", "HEAD", "OPTIONS"},
 		AllowedHeaders:   []string{"User-Agent", "Content-Type", "Accept", "Accept-Encoding", "Accept-Language", "Cache-Control", "Connection", "Host", "Origin", "Referer", "Authorization"},
 		ExposedHeaders:   []string{"Content-Length", "Location"},
@@ -52,8 +50,8 @@ func (r rest) Start() error {
 	r.router.Use(cors.Handler(options))
 	r.router.Use(middleware.Heartbeat("/ping"))
 
-	authService := services.NewAuthService(r.env, r.db)
-	authHandler := handlers.NewAuthHandler(authService, r.env, r.db)
+	authService := services.NewAuthService(r.configs)
+	authHandler := handlers.NewAuthHandler(r.configs, authService)
 	r.router.Post("/auth/register", authHandler.Register)
 	r.router.Post("/auth/login", authHandler.Login)
 
