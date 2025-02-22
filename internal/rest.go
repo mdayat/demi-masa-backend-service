@@ -11,7 +11,9 @@ import (
 	"github.com/go-chi/httprate"
 	"github.com/mdayat/demi-masa/configs"
 
+	"github.com/mdayat/demi-masa/internal/handlers"
 	"github.com/mdayat/demi-masa/internal/middlewares"
+	"github.com/mdayat/demi-masa/internal/services"
 )
 
 type RestServicer interface {
@@ -49,6 +51,11 @@ func (r rest) Start() error {
 	}
 	r.router.Use(cors.Handler(options))
 	r.router.Use(middleware.Heartbeat("/ping"))
+
+	authService := services.NewAuthService(r.env, r.db)
+	authHandler := handlers.NewAuthHandler(authService, r.env, r.db)
+	r.router.Post("/auth/register", authHandler.Register)
+	r.router.Post("/auth/login", authHandler.Login)
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {
 		return err
