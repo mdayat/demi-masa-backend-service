@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/mdayat/demi-masa/configs"
@@ -40,6 +41,14 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	payload, err := a.authService.ValidateIDToken(ctx, reqBody.IdToken)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid Id token")
+		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	fmt.Println(payload)
 	res.Write([]byte("Register"))
 }
 

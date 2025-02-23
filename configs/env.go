@@ -9,6 +9,7 @@ import (
 type Env struct {
 	DatabaseURL    string
 	AllowedOrigins string
+	ClientId       string
 }
 
 func LoadEnv() (Env, error) {
@@ -19,6 +20,7 @@ func LoadEnv() (Env, error) {
 	env := Env{
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
 		AllowedOrigins: os.Getenv("ALLOWED_ORIGINS"),
+		ClientId:       os.Getenv("CLIENT_ID"),
 	}
 
 	return env, nil
