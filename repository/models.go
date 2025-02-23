@@ -9,10 +9,8 @@ import (
 )
 
 type User struct {
-	ID                    int64              `json:"id"`
-	FirstName             string             `json:"first_name"`
-	SubscriptionExpiredAt pgtype.Timestamptz `json:"subscription_expired_at"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	ID        string             `json:"id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }

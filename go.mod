@@ -3,6 +3,7 @@ module github.com/mdayat/demi-masa
 go 1.23.6
 
 require (
+	github.com/avast/retry-go/v4 v4.6.0
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httprate v0.14.1

@@ -13,9 +13,16 @@ func DecodeAndValidate(req *http.Request, validate *validator.Validate, v interf
 		return err
 	}
 
-	if err := validate.Struct(v); err != nil {
-		return err
-	}
+	return validate.Struct(v)
+}
 
-	return nil
+type SendSuccessResponseParams struct {
+	StatusCode int
+	ResBody    interface{}
+}
+
+func SendSuccessResponse(res http.ResponseWriter, params SendSuccessResponseParams) error {
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(params.StatusCode)
+	return json.NewEncoder(res).Encode(params.ResBody)
 }

@@ -9,16 +9,29 @@ import (
 	"context"
 )
 
-const createUser = `-- name: CreateUser :exec
-INSERT INTO "user" (id, first_name) VALUES ($1, $2)
+const checkUserExistence = `-- name: CheckUserExistence :one
+SELECT EXISTS(SELECT 1 FROM "user" WHERE id = $1)
 `
 
-type CreateUserParams struct {
-	ID        int64  `json:"id"`
-	FirstName string `json:"first_name"`
+func (q *Queries) CheckUserExistence(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkUserExistence, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
-	_, err := q.db.Exec(ctx, createUser, arg.ID, arg.FirstName)
-	return err
+const createUser = `-- name: CreateUser :one
+INSERT INTO "user" (id) VALUES ($1) RETURNING id, created_at, updated_at, deleted_at
+`
+
+func (q *Queries) CreateUser(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, createUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
