@@ -7,6 +7,8 @@ package repository
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const checkUserExistence = `-- name: CheckUserExistence :one
@@ -18,6 +20,21 @@ func (q *Queries) CheckUserExistence(ctx context.Context, id string) (bool, erro
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const createRefreshToken = `-- name: CreateRefreshToken :exec
+INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3)
+`
+
+type CreateRefreshTokenParams struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    string             `json:"user_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, createRefreshToken, arg.ID, arg.UserID, arg.ExpiresAt)
+	return err
 }
 
 const createUser = `-- name: CreateUser :one

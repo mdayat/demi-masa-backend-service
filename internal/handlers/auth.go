@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
+	"github.com/mdayat/demi-masa/internal/dbutil"
 	"github.com/mdayat/demi-masa/internal/httputil"
 	"github.com/mdayat/demi-masa/internal/services"
+	"github.com/mdayat/demi-masa/repository"
 	"github.com/rs/zerolog/log"
 )
 
@@ -24,6 +29,12 @@ func NewAuthHandler(configs configs.Configs, authService services.AuthServicer) 
 		configs:     configs,
 		authService: authService,
 	}
+}
+
+type registrationResult struct {
+	user         repository.User
+	refreshToken string
+	accessToken  string
 }
 
 func (a auth) Register(res http.ResponseWriter, req *http.Request) {
@@ -60,20 +71,55 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	user, err := a.authService.CreateUser(ctx, services.CreateUserParams{
-		UserId: payload.Subject,
-	})
+	retryableFunc := func(qtx *repository.Queries) (registrationResult, error) {
+		user, err := qtx.CreateUser(ctx, payload.Subject)
+		if err != nil {
+			return registrationResult{}, fmt.Errorf("failed to create user: %w", err)
+		}
 
+		result, err := a.authService.CreateRefreshToken(user.ID)
+		if err != nil {
+			return registrationResult{}, fmt.Errorf("failed to create refresh token: %w", err)
+		}
+
+		accessToken, err := a.authService.CreateAccessToken(user.ID)
+		if err != nil {
+			return registrationResult{}, fmt.Errorf("failed to create access token: %w", err)
+		}
+
+		refreshTokenId, err := uuid.Parse(result.Claims.ID)
+		if err != nil {
+			return registrationResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+		}
+
+		err = qtx.CreateRefreshToken(ctx, repository.CreateRefreshTokenParams{
+			ID:        pgtype.UUID{Bytes: refreshTokenId, Valid: true},
+			UserID:    user.ID,
+			ExpiresAt: pgtype.Timestamptz{Time: result.Claims.ExpiresAt.Time, Valid: true},
+		})
+
+		if err != nil {
+			return registrationResult{}, fmt.Errorf("failed to create refresh token: %w", err)
+		}
+
+		return registrationResult{user, result.TokenString, accessToken}, nil
+	}
+
+	result, err := dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to create user")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to register a new user")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
 	resBody := struct {
-		UserId string `json:"user_id"`
+		UserId       string `json:"user_id"`
+		RefreshToken string `json:"refresh_token"`
+		AccessToken  string `json:"access_token"`
 	}{
-		UserId: user.ID,
+		UserId:       result.user.ID,
+		RefreshToken: result.refreshToken,
+		AccessToken:  result.accessToken,
 	}
 
 	params := httputil.SendSuccessResponseParams{
