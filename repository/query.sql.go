@@ -22,27 +22,43 @@ func (q *Queries) CheckUserExistence(ctx context.Context, id string) (bool, erro
 	return exists, err
 }
 
-const createRefreshToken = `-- name: CreateRefreshToken :exec
+const insertRefreshToken = `-- name: InsertRefreshToken :exec
 INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3)
 `
 
-type CreateRefreshTokenParams struct {
+type InsertRefreshTokenParams struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    string             `json:"user_id"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
-func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, createRefreshToken, arg.ID, arg.UserID, arg.ExpiresAt)
+func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, insertRefreshToken, arg.ID, arg.UserID, arg.ExpiresAt)
 	return err
 }
 
-const createUser = `-- name: CreateUser :one
+const insertUser = `-- name: InsertUser :one
 INSERT INTO "user" (id) VALUES ($1) RETURNING id, created_at, updated_at, deleted_at
 `
 
-func (q *Queries) CreateUser(ctx context.Context, id string) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, id)
+func (q *Queries) InsertUser(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, insertUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const selectUserById = `-- name: SelectUserById :one
+SELECT id, created_at, updated_at, deleted_at FROM "user" WHERE id = $1
+`
+
+func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, selectUserById, id)
 	var i User
 	err := row.Scan(
 		&i.ID,

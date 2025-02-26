@@ -11,6 +11,7 @@ import (
 
 	"github.com/avast/retry-go/v4"
 	"github.com/mdayat/demi-masa/configs"
+	"github.com/mdayat/demi-masa/repository"
 	"google.golang.org/api/idtoken"
 )
 
@@ -21,6 +22,8 @@ type AuthServicer interface {
 	ValidateRefreshToken(tokenString string) (string, error)
 	CreateAccessToken(userId string) (string, error)
 	ValidateAccessToken(tokenString string) (string, error)
+	SelectUserById(ctx context.Context, userId string) (repository.User, error)
+	InsertRefreshToken(ctx context.Context, arg repository.InsertRefreshTokenParams) error
 }
 
 type auth struct {
@@ -171,4 +174,24 @@ func (a auth) ValidateAccessToken(tokenString string) (string, error) {
 	}
 
 	return claims.Subject, nil
+}
+
+func (a auth) SelectUserById(ctx context.Context, userId string) (repository.User, error) {
+	return retry.DoWithData(
+		func() (repository.User, error) {
+			return a.configs.Db.Queries.SelectUserById(ctx, userId)
+		},
+		retry.Attempts(3),
+		retry.LastErrorOnly(true),
+	)
+}
+
+func (a auth) InsertRefreshToken(ctx context.Context, arg repository.InsertRefreshTokenParams) error {
+	return retry.Do(
+		func() error {
+			return a.configs.Db.Queries.InsertRefreshToken(ctx, arg)
+		},
+		retry.Attempts(3),
+		retry.LastErrorOnly(true),
+	)
 }
