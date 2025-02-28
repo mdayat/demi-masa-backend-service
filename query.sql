@@ -9,3 +9,9 @@ SELECT EXISTS(SELECT 1 FROM "user" WHERE id = $1);
 
 -- name: InsertRefreshToken :exec
 INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3);
+
+-- name: SelectRefreshTokenById :one
+SELECT * FROM refresh_token WHERE id = $1 AND user_id = $2;
+
+-- name: RevokeRefreshToken :exec
+UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2;

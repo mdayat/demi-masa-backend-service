@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,17 +23,18 @@ import (
 type AuthHandler interface {
 	Register(res http.ResponseWriter, req *http.Request)
 	Login(res http.ResponseWriter, req *http.Request)
+	Refresh(res http.ResponseWriter, req *http.Request)
 }
 
 type auth struct {
-	configs     configs.Configs
-	authService services.AuthServicer
+	configs configs.Configs
+	service services.AuthServicer
 }
 
-func NewAuthHandler(configs configs.Configs, authService services.AuthServicer) AuthHandler {
+func NewAuthHandler(configs configs.Configs, service services.AuthServicer) AuthHandler {
 	return &auth{
-		configs:     configs,
-		authService: authService,
+		configs: configs,
+		service: service,
 	}
 }
 
@@ -54,14 +58,14 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	payload, err := a.authService.ValidateIDToken(ctx, reqBody.IdToken)
+	payload, err := a.service.ValidateIDToken(ctx, reqBody.IdToken)
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid Id token")
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
-	isUserExist, err := a.authService.CheckUserExistence(ctx, payload.Subject)
+	isUserExist, err := a.service.CheckUserExistence(ctx, payload.Subject)
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to check user existence")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -80,17 +84,39 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 			return registrationResult{}, fmt.Errorf("failed to insert user: %w", err)
 		}
 
-		result, err := a.authService.CreateRefreshToken(user.ID)
+		now := time.Now()
+		refreshTokenClaims := services.RefreshTokenClaims{
+			Type: services.Refresh,
+			RegisteredClaims: jwt.RegisteredClaims{
+				ID:        uuid.NewString(),
+				ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(now),
+				Issuer:    a.configs.Env.OriginURL,
+				Subject:   user.ID,
+			},
+		}
+
+		refreshToken, err := a.service.CreateRefreshToken(refreshTokenClaims)
 		if err != nil {
 			return registrationResult{}, fmt.Errorf("failed to create refresh token: %w", err)
 		}
 
-		accessToken, err := a.authService.CreateAccessToken(user.ID)
+		accessTokenClaims := services.AccessTokenClaims{
+			Type: services.Access,
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+				IssuedAt:  jwt.NewNumericDate(now),
+				Issuer:    a.configs.Env.OriginURL,
+				Subject:   user.ID,
+			},
+		}
+
+		accessToken, err := a.service.CreateAccessToken(accessTokenClaims)
 		if err != nil {
 			return registrationResult{}, fmt.Errorf("failed to create access token: %w", err)
 		}
 
-		refreshTokenId, err := uuid.Parse(result.Claims.ID)
+		refreshTokenId, err := uuid.Parse(refreshTokenClaims.ID)
 		if err != nil {
 			return registrationResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
 		}
@@ -98,14 +124,20 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		err = qtx.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
 			ID:        pgtype.UUID{Bytes: refreshTokenId, Valid: true},
 			UserID:    user.ID,
-			ExpiresAt: pgtype.Timestamptz{Time: result.Claims.ExpiresAt.Time, Valid: true},
+			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
 		})
 
 		if err != nil {
 			return registrationResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
 		}
 
-		return registrationResult{user: user, refreshToken: result.TokenString, accessToken: accessToken}, nil
+		registrationResult := registrationResult{
+			user:         user,
+			refreshToken: refreshToken,
+			accessToken:  accessToken,
+		}
+
+		return registrationResult, nil
 	}
 
 	result, err := dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
@@ -139,38 +171,65 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	logger.Info().Int("status_code", http.StatusCreated).Msg("successfully registered user")
 }
 
-type authenticationResult struct {
+type authenticateUserResult struct {
 	refreshToken string
 	accessToken  string
 }
 
-func authenticateUser(ctx context.Context, service services.AuthServicer, userId string) (authenticationResult, error) {
-	result, err := service.CreateRefreshToken(userId)
-	if err != nil {
-		return authenticationResult{}, fmt.Errorf("failed to create refresh token: %w", err)
+func authenticateUser(ctx context.Context, auth auth, userId string) (authenticateUserResult, error) {
+	now := time.Now()
+	refreshTokenClaims := services.RefreshTokenClaims{
+		Type: services.Refresh,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
+			ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    auth.configs.Env.OriginURL,
+			Subject:   userId,
+		},
 	}
 
-	accessToken, err := service.CreateAccessToken(userId)
+	refreshToken, err := auth.service.CreateRefreshToken(refreshTokenClaims)
 	if err != nil {
-		return authenticationResult{}, fmt.Errorf("failed to create access token: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
 	}
 
-	refreshTokenId, err := uuid.Parse(result.Claims.ID)
-	if err != nil {
-		return authenticationResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+	accessTokenClaims := services.AccessTokenClaims{
+		Type: services.Access,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    auth.configs.Env.OriginURL,
+			Subject:   userId,
+		},
 	}
 
-	err = service.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
+	accessToken, err := auth.service.CreateAccessToken(accessTokenClaims)
+	if err != nil {
+		return authenticateUserResult{}, fmt.Errorf("failed to create access token: %w", err)
+	}
+
+	refreshTokenId, err := uuid.Parse(refreshTokenClaims.ID)
+	if err != nil {
+		return authenticateUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+	}
+
+	err = auth.service.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
 		ID:        pgtype.UUID{Bytes: refreshTokenId, Valid: true},
 		UserID:    userId,
-		ExpiresAt: pgtype.Timestamptz{Time: result.Claims.ExpiresAt.Time, Valid: true},
+		ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
 	})
 
 	if err != nil {
-		return authenticationResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
 	}
 
-	return authenticationResult{refreshToken: result.TokenString, accessToken: accessToken}, nil
+	authenticateUserResult := authenticateUserResult{
+		refreshToken: refreshToken,
+		accessToken:  accessToken,
+	}
+
+	return authenticateUserResult, nil
 }
 
 func (a auth) Login(res http.ResponseWriter, req *http.Request) {
@@ -187,14 +246,14 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	payload, err := a.authService.ValidateIDToken(ctx, reqBody.IdToken)
+	payload, err := a.service.ValidateIDToken(ctx, reqBody.IdToken)
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid Id token")
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
-	user, err := a.authService.SelectUserById(ctx, payload.Subject)
+	user, err := a.service.SelectUserById(ctx, payload.Subject)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("user not found")
@@ -206,7 +265,7 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := authenticateUser(ctx, a.authService, user.ID)
+	result, err := authenticateUser(ctx, a, user.ID)
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to authenticate user")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -235,4 +294,69 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 	}
 
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully authenticate user")
+}
+
+func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	logger := log.Ctx(ctx).With().Logger()
+
+	bearerToken := req.Header.Get("Authorization")
+	if bearerToken == "" || !strings.Contains(bearerToken, "Bearer") {
+		logger.Error().Err(errors.New("invalid authorization header")).Caller().Int("status_code", http.StatusUnauthorized).Send()
+		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	claims, err := a.service.ValidateRefreshToken(bearerToken)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid refresh token")
+		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	refreshToken, err := a.service.SelectRefreshTokenById(ctx, services.SelectRefreshTokenByIdParams{Jti: claims.ID, UserId: claims.Subject})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select refresh token")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	if (err != nil && errors.Is(err, pgx.ErrNoRows)) || refreshToken.Revoked || refreshToken.ExpiresAt.Time.Before(time.Now()) {
+		logger.Error().Err(errors.New("invalid refresh token")).Caller().Int("status_code", http.StatusUnauthorized).Send()
+		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	result, err := a.service.RotateRefreshToken(ctx, services.RotateRefreshTokenParams{
+		Jti:       refreshToken.ID.String(),
+		UserId:    refreshToken.UserID,
+		ExpiresAt: refreshToken.ExpiresAt.Time,
+	})
+
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to rotate refresh token")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	resBody := struct {
+		RefreshToken string `json:"refresh_token"`
+		AccessToken  string `json:"access_token"`
+	}{
+		RefreshToken: result.RefreshToken,
+		AccessToken:  result.AccessToken,
+	}
+
+	params := httputil.SendSuccessResponseParams{
+		StatusCode: http.StatusCreated,
+		ResBody:    resBody,
+	}
+
+	if err := httputil.SendSuccessResponse(res, params); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info().Int("status_code", http.StatusCreated).Msg("successfully rotated refresh token")
 }

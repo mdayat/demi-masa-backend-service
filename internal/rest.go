@@ -54,6 +54,7 @@ func (r rest) Start() error {
 	authHandler := handlers.NewAuthHandler(r.configs, authService)
 	r.router.Post("/auth/register", authHandler.Register)
 	r.router.Post("/auth/login", authHandler.Login)
+	r.router.Post("/auth/refresh", authHandler.Refresh)
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {
 		return err

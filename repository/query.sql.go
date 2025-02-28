@@ -53,6 +53,42 @@ func (q *Queries) InsertUser(ctx context.Context, id string) (User, error) {
 	return i, err
 }
 
+const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
+UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2
+`
+
+type RevokeRefreshTokenParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID string      `json:"user_id"`
+}
+
+func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, revokeRefreshToken, arg.ID, arg.UserID)
+	return err
+}
+
+const selectRefreshTokenById = `-- name: SelectRefreshTokenById :one
+SELECT id, user_id, revoked, created_at, expires_at FROM refresh_token WHERE id = $1 AND user_id = $2
+`
+
+type SelectRefreshTokenByIdParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID string      `json:"user_id"`
+}
+
+func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshTokenByIdParams) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, selectRefreshTokenById, arg.ID, arg.UserID)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Revoked,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const selectUserById = `-- name: SelectUserById :one
 SELECT id, created_at, updated_at, deleted_at FROM "user" WHERE id = $1
 `
