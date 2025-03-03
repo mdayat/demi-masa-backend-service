@@ -59,6 +59,10 @@ func (r rest) Start() error {
 
 	r.router.Group(func(router chi.Router) {
 		router.Use(customMiddleware.Authenticate)
+
+		userService := services.NewUserService(r.configs)
+		userHandler := handlers.NewUserHandler(r.configs, authService, userService)
+		router.Get("/users/me", userHandler.GetMe)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {
