@@ -6,13 +6,12 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
 	"github.com/mdayat/demi-masa/configs"
 
 	"github.com/mdayat/demi-masa/internal/handlers"
-	"github.com/mdayat/demi-masa/internal/middlewares"
 	"github.com/mdayat/demi-masa/internal/services"
 )
 
@@ -33,10 +32,13 @@ func NewRestService(configs configs.Configs) RestServicer {
 }
 
 func (r rest) Start() error {
-	r.router.Use(middleware.CleanPath)
-	r.router.Use(middleware.RealIP)
-	r.router.Use(middlewares.Logger)
-	r.router.Use(middleware.Recoverer)
+	authService := services.NewAuthService(r.configs)
+	customMiddleware := handlers.NewMiddlewareHandler(r.configs, authService)
+
+	r.router.Use(chiMiddleware.CleanPath)
+	r.router.Use(chiMiddleware.RealIP)
+	r.router.Use(customMiddleware.Logger)
+	r.router.Use(chiMiddleware.Recoverer)
 	r.router.Use(httprate.LimitByIP(100, 1*time.Minute))
 
 	options := cors.Options{
@@ -48,13 +50,16 @@ func (r rest) Start() error {
 		MaxAge:           300,
 	}
 	r.router.Use(cors.Handler(options))
-	r.router.Use(middleware.Heartbeat("/ping"))
+	r.router.Use(chiMiddleware.Heartbeat("/ping"))
 
-	authService := services.NewAuthService(r.configs)
 	authHandler := handlers.NewAuthHandler(r.configs, authService)
 	r.router.Post("/auth/register", authHandler.Register)
 	r.router.Post("/auth/login", authHandler.Login)
 	r.router.Post("/auth/refresh", authHandler.Refresh)
+
+	r.router.Group(func(router chi.Router) {
+		router.Use(customMiddleware.Authenticate)
+	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {
 		return err
