@@ -63,6 +63,7 @@ func (r rest) Start() error {
 		userService := services.NewUserService(r.configs)
 		userHandler := handlers.NewUserHandler(r.configs, authService, userService)
 		router.Get("/users/me", userHandler.GetMe)
+		router.Get("/users/{userId}/active-subscription", userHandler.GetActiveSubscription)
 
 		prayerService := services.NewPrayerService(r.configs)
 		prayerHandler := handlers.NewPrayerHandler(r.configs, prayerService)

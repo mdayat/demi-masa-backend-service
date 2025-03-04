@@ -3,7 +3,9 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
@@ -13,6 +15,7 @@ import (
 
 type UserHandler interface {
 	GetMe(res http.ResponseWriter, req *http.Request)
+	GetActiveSubscription(res http.ResponseWriter, req *http.Request)
 }
 
 type user struct {
@@ -70,4 +73,40 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 	}
 
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got me")
+}
+
+func (u user) GetActiveSubscription(res http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	logger := log.Ctx(ctx).With().Logger()
+
+	userId := chi.URLParam(req, "userId")
+	subscription, err := u.userService.SelectActiveSubscription(ctx, userId)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select active subscription")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	params := httputil.SendSuccessResponseParams{StatusCode: http.StatusOK}
+	if err == nil {
+		resBody := struct {
+			Id        string `json:"id"`
+			StartDate string `json:"start_date"`
+			EndDate   string `json:"end_date"`
+		}{
+			Id:        subscription.ID.String(),
+			StartDate: subscription.StartDate.Time.Format(time.RFC3339),
+			EndDate:   subscription.EndDate.Time.Format(time.RFC3339),
+		}
+
+		params.ResBody = resBody
+	}
+
+	if err := httputil.SendSuccessResponse(res, params); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got active subscription")
 }
