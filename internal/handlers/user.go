@@ -33,7 +33,7 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	userId := req.Context().Value(userIdKey{}).(string)
+	userId := ctx.Value(userIdKey{}).(string)
 	if userId == "" {
 		logger.Error().Err(errors.New("user not found")).Caller().Int("status_code", http.StatusNotFound).Send()
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)

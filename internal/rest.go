@@ -63,6 +63,10 @@ func (r rest) Start() error {
 		userService := services.NewUserService(r.configs)
 		userHandler := handlers.NewUserHandler(r.configs, authService, userService)
 		router.Get("/users/me", userHandler.GetMe)
+
+		prayerService := services.NewPrayerService(r.configs)
+		prayerHandler := handlers.NewPrayerHandler(r.configs, prayerService)
+		router.Get("/prayers", prayerHandler.GetPrayers)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {

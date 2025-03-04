@@ -30,9 +30,19 @@ type Plan struct {
 	ID               pgtype.UUID        `json:"id"`
 	Name             string             `json:"name"`
 	Price            int32              `json:"price"`
-	DurationInMonths int32              `json:"duration_in_months"`
+	DurationInMonths int16              `json:"duration_in_months"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type Prayer struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID string      `json:"user_id"`
+	Name   string      `json:"name"`
+	Status string      `json:"status"`
+	Year   int16       `json:"year"`
+	Month  int16       `json:"month"`
+	Day    int16       `json:"day"`
 }
 
 type RefreshToken struct {

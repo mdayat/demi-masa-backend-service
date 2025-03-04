@@ -5,13 +5,31 @@ CREATE TABLE "user" (
 );
 
 CREATE TABLE refresh_token (
-  id UUID PRIMARY KEY,     
+  id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
   revoked BOOLEAN DEFAULT FALSE NOT NULL,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
 
   CONSTRAINT fk_refresh_token_user_id
+    FOREIGN KEY (user_id)
+    REFERENCES "user"(id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE
+);
+
+CREATE TABLE prayer (
+  id UUID PRIMARY KEY,
+  user_id VARCHAR(255) NOT NULL,
+  name VARCHAR(16) NOT NULL CHECK (name IN ('subuh', 'zuhur', 'asar', 'magrib', 'isya')),
+  status VARCHAR(16) NOT NULL CHECK (status IN ('on_time', 'late', 'missed')),
+  year SMALLINT NOT NULL,
+  month SMALLINT NOT NULL,
+  day SMALLINT NOT NULL,
+
+  UNIQUE (user_id, name, year, month, day),
+
+  CONSTRAINT fk_prayer_user_id
     FOREIGN KEY (user_id)
     REFERENCES "user"(id)
     ON UPDATE CASCADE
@@ -58,7 +76,7 @@ CREATE TABLE plan (
   id UUID PRIMARY KEY,
   name VARCHAR(100) UNIQUE NOT NULL,
   price INT NOT NULL,
-  duration_in_months INT NOT NULL,
+  duration_in_months SMALLINT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
   deleted_at TIMESTAMPTZ NULL
 );

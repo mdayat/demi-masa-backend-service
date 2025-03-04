@@ -62,6 +62,50 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshToken
 	return err
 }
 
+const selectPrayers = `-- name: SelectPrayers :many
+SELECT id, user_id, name, status, year, month, day FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = $4 OR $4 IS NULL)
+`
+
+type SelectPrayersParams struct {
+	UserID string      `json:"user_id"`
+	Year   int16       `json:"year"`
+	Month  int16       `json:"month"`
+	Day    pgtype.Int2 `json:"day"`
+}
+
+func (q *Queries) SelectPrayers(ctx context.Context, arg SelectPrayersParams) ([]Prayer, error) {
+	rows, err := q.db.Query(ctx, selectPrayers,
+		arg.UserID,
+		arg.Year,
+		arg.Month,
+		arg.Day,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Prayer
+	for rows.Next() {
+		var i Prayer
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Status,
+			&i.Year,
+			&i.Month,
+			&i.Day,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const selectRefreshTokenById = `-- name: SelectRefreshTokenById :one
 SELECT id, user_id, revoked, created_at, expires_at FROM refresh_token WHERE id = $1 AND user_id = $2
 `
