@@ -38,18 +38,13 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshToken
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO "user" (id) VALUES ($1) RETURNING id, created_at, updated_at, deleted_at
+INSERT INTO "user" (id) VALUES ($1) RETURNING id, created_at, deleted_at
 `
 
 func (q *Queries) InsertUser(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, insertUser, id)
 	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.DeletedAt)
 	return i, err
 }
 
@@ -90,17 +85,12 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 }
 
 const selectUserById = `-- name: SelectUserById :one
-SELECT id, created_at, updated_at, deleted_at FROM "user" WHERE id = $1
+SELECT id, created_at, deleted_at FROM "user" WHERE id = $1
 `
 
 func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, selectUserById, id)
 	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.DeletedAt)
 	return i, err
 }

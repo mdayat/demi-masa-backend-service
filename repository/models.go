@@ -8,6 +8,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Invoice struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      string             `json:"user_id"`
+	TotalAmount int32              `json:"total_amount"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type Payment struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     string             `json:"user_id"`
+	InvoiceID  pgtype.UUID        `json:"invoice_id"`
+	AmountPaid int32              `json:"amount_paid"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type Plan struct {
+	ID               pgtype.UUID        `json:"id"`
+	Name             string             `json:"name"`
+	Price            int32              `json:"price"`
+	DurationInMonths int32              `json:"duration_in_months"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    string             `json:"user_id"`
@@ -16,9 +43,19 @@ type RefreshToken struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
+type Subscription struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    string             `json:"user_id"`
+	PlanID    pgtype.UUID        `json:"plan_id"`
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type User struct {
 	ID        string             `json:"id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
