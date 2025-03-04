@@ -138,3 +138,17 @@ func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
 	err := row.Scan(&i.ID, &i.CreatedAt, &i.DeletedAt)
 	return i, err
 }
+
+const updatePrayerStatus = `-- name: UpdatePrayerStatus :exec
+UPDATE prayer SET status = $2 WHERE id = $1
+`
+
+type UpdatePrayerStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+func (q *Queries) UpdatePrayerStatus(ctx context.Context, arg UpdatePrayerStatusParams) error {
+	_, err := q.db.Exec(ctx, updatePrayerStatus, arg.ID, arg.Status)
+	return err
+}

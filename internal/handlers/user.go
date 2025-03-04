@@ -69,5 +69,5 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully get me")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got me")
 }

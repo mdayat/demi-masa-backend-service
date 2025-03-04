@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/avast/retry-go/v4"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/repository"
 )
@@ -14,6 +16,7 @@ import (
 type PrayerServicer interface {
 	ValidateYearAndMonthParams(yearString, monthString string) (int, int, error)
 	SelectPrayers(ctx context.Context, arg repository.SelectPrayersParams) ([]repository.Prayer, error)
+	UpdatePrayerStatus(ctx context.Context, arg UpdatePrayerStatusParams) error
 }
 
 type prayer struct {
@@ -52,6 +55,29 @@ func (p prayer) SelectPrayers(ctx context.Context, arg repository.SelectPrayersP
 	return retry.DoWithData(
 		func() ([]repository.Prayer, error) {
 			return p.configs.Db.Queries.SelectPrayers(ctx, arg)
+		},
+		retry.Attempts(3),
+		retry.LastErrorOnly(true),
+	)
+}
+
+type UpdatePrayerStatusParams struct {
+	Id     string
+	Status string
+}
+
+func (p prayer) UpdatePrayerStatus(ctx context.Context, arg UpdatePrayerStatusParams) error {
+	prayerId, err := uuid.Parse(arg.Id)
+	if err != nil {
+		return fmt.Errorf("failed to parse prayer Id to UUID: %w", err)
+	}
+
+	return retry.Do(
+		func() error {
+			return p.configs.Db.Queries.UpdatePrayerStatus(ctx, repository.UpdatePrayerStatusParams{
+				ID:     pgtype.UUID{Bytes: prayerId, Valid: true},
+				Status: arg.Status,
+			})
 		},
 		retry.Attempts(3),
 		retry.LastErrorOnly(true),

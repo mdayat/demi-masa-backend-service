@@ -18,3 +18,6 @@ UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2;
 
 -- name: SelectPrayers :many
 SELECT * FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = sqlc.narg('day') OR sqlc.narg('day') IS NULL);
+
+-- name: UpdatePrayerStatus :exec
+UPDATE prayer SET status = $2 WHERE id = $1;

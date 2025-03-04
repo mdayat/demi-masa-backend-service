@@ -67,6 +67,7 @@ func (r rest) Start() error {
 		prayerService := services.NewPrayerService(r.configs)
 		prayerHandler := handlers.NewPrayerHandler(r.configs, prayerService)
 		router.Get("/prayers", prayerHandler.GetPrayers)
+		router.Put("/prayers/{prayerId}", prayerHandler.UpdatePrayerStatus)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {

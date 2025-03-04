@@ -293,7 +293,7 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully authenticate user")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully authenticated user")
 }
 
 func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {

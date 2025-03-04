@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
@@ -14,6 +17,7 @@ import (
 
 type PrayerHandler interface {
 	GetPrayers(res http.ResponseWriter, req *http.Request)
+	UpdatePrayerStatus(res http.ResponseWriter, req *http.Request)
 }
 
 type prayer struct {
@@ -99,5 +103,40 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully get prayers")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got prayers")
+}
+
+func (p prayer) UpdatePrayerStatus(res http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	logger := log.Ctx(ctx).With().Logger()
+
+	var reqBody struct {
+		Id     string `json:"id" validate:"required,uuid"`
+		Status string `json:"status" validate:"required"`
+	}
+
+	if err := httputil.DecodeAndValidate(req, p.configs.Validate, &reqBody); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	prayerId := chi.URLParam(req, "prayerId")
+	err := p.service.UpdatePrayerStatus(ctx, services.UpdatePrayerStatusParams{
+		Id:     prayerId,
+		Status: reqBody.Status,
+	})
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("prayer not found")
+			http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		} else {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update prayer status")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully updated prayer status")
 }
