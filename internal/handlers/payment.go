@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"time"
@@ -197,6 +198,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 		ResBody:    resBody,
 	}
 
+	res.Header().Set("Location", fmt.Sprintf("%s/invoices/%s", p.configs.Env.OriginURL, merchantRefString))
 	if err := httputil.SendSuccessResponse(res, params); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

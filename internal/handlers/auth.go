@@ -157,6 +157,7 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		ResBody:    resBody,
 	}
 
+	res.Header().Set("Location", fmt.Sprintf("%s/users/me", a.configs.Env.OriginURL))
 	if err := httputil.SendSuccessResponse(res, params); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
