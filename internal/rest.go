@@ -63,12 +63,16 @@ func (r rest) Start() error {
 		userService := services.NewUserService(r.configs)
 		userHandler := handlers.NewUserHandler(r.configs, authService, userService)
 		router.Get("/users/me", userHandler.GetMe)
-		router.Get("/users/{userId}/active-subscription", userHandler.GetActiveSubscription)
+		router.Get("/subscriptions/active", userHandler.GetActiveSubscription)
 
 		prayerService := services.NewPrayerService(r.configs)
 		prayerHandler := handlers.NewPrayerHandler(r.configs, prayerService)
 		router.Get("/prayers", prayerHandler.GetPrayers)
 		router.Put("/prayers/{prayerId}", prayerHandler.UpdatePrayerStatus)
+
+		paymentService := services.NewPaymentService(r.configs)
+		paymentHandler := handlers.NewPaymentHandler(r.configs, paymentService)
+		router.Get("/invoices/active", paymentHandler.GetActiveInvoice)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {

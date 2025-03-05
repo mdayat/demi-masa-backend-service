@@ -51,6 +51,24 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshToken
 	return err
 }
 
+const selectActiveInvoice = `-- name: SelectActiveInvoice :one
+SELECT id, user_id, total_amount, status, expires_at, created_at FROM invoice WHERE user_id = $1 AND expires_at > NOW()
+`
+
+func (q *Queries) SelectActiveInvoice(ctx context.Context, userID string) (Invoice, error) {
+	row := q.db.QueryRow(ctx, selectActiveInvoice, userID)
+	var i Invoice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TotalAmount,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const selectActiveSubscription = `-- name: SelectActiveSubscription :one
 SELECT id, user_id, plan_id, payment_id, start_date, end_date FROM subscription WHERE user_id = $1 AND end_date > NOW()
 `

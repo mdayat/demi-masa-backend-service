@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
@@ -79,7 +78,7 @@ func (u user) GetActiveSubscription(res http.ResponseWriter, req *http.Request) 
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	userId := chi.URLParam(req, "userId")
+	userId := ctx.Value(userIdKey{}).(string)
 	subscription, err := u.userService.SelectActiveSubscription(ctx, userId)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select active subscription")

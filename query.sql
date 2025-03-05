@@ -21,3 +21,6 @@ SELECT * FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = 
 
 -- name: UpdatePrayerStatus :exec
 UPDATE prayer SET status = $2 WHERE id = $1;
+
+-- name: SelectActiveInvoice :one
+SELECT * FROM invoice WHERE user_id = $1 AND expires_at > NOW();
