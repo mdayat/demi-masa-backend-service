@@ -8,7 +8,6 @@ CREATE TABLE refresh_token (
   id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
   revoked BOOLEAN DEFAULT FALSE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
 
   CONSTRAINT fk_refresh_token_user_id
@@ -40,9 +39,9 @@ CREATE TABLE invoice (
   id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
   total_amount INT NOT NULL CHECK (total_amount >= 0),
+  status VARCHAR(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'paid')),
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  deleted_at TIMESTAMPTZ NULL,
 
   CONSTRAINT fk_invoice_user_id
     FOREIGN KEY (user_id)
@@ -51,13 +50,16 @@ CREATE TABLE invoice (
     ON DELETE CASCADE
 );
 
+CREATE UNIQUE INDEX unique_invoice_user_id_active
+  ON invoice(user_id)
+  WHERE expires_at > NOW();
+
 CREATE TABLE payment (
   id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
   invoice_id UUID UNIQUE NOT NULL,
   amount_paid INT NOT NULL CHECK (amount_paid >= 0),
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  deleted_at TIMESTAMPTZ NULL,
 
   CONSTRAINT fk_payment_user_id
     FOREIGN KEY (user_id)
@@ -86,10 +88,8 @@ CREATE TABLE subscription (
   user_id VARCHAR(255) NOT NULL,
   plan_id UUID NOT NULL,
   payment_id UUID UNIQUE NOT NULL,
-  start_date TIMESTAMPTZ NOT NULL,
+  start_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
   end_date TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  deleted_at TIMESTAMPTZ NULL,
 
   CONSTRAINT fk_subscription_user_id
     FOREIGN KEY (user_id)
@@ -109,3 +109,7 @@ CREATE TABLE subscription (
     ON UPDATE CASCADE
     ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX unique_subscription_user_id_active
+  ON subscription(user_id)
+  WHERE end_date > NOW();

@@ -2,7 +2,7 @@
 INSERT INTO "user" (id) VALUES ($1) RETURNING *;
 
 -- name: SelectUserById :one
-SELECT * FROM "user" WHERE id = $1;
+SELECT * FROM "user" WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SelectActiveSubscription :one
 SELECT * FROM subscription WHERE user_id = $1 AND end_date > NOW();

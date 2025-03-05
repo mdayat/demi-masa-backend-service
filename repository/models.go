@@ -12,9 +12,9 @@ type Invoice struct {
 	ID          pgtype.UUID        `json:"id"`
 	UserID      string             `json:"user_id"`
 	TotalAmount int32              `json:"total_amount"`
+	Status      string             `json:"status"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Payment struct {
@@ -23,7 +23,6 @@ type Payment struct {
 	InvoiceID  pgtype.UUID        `json:"invoice_id"`
 	AmountPaid int32              `json:"amount_paid"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Plan struct {
@@ -49,7 +48,6 @@ type RefreshToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    string             `json:"user_id"`
 	Revoked   bool               `json:"revoked"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
@@ -60,8 +58,6 @@ type Subscription struct {
 	PaymentID pgtype.UUID        `json:"payment_id"`
 	StartDate pgtype.Timestamptz `json:"start_date"`
 	EndDate   pgtype.Timestamptz `json:"end_date"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type User struct {

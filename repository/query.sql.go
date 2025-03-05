@@ -63,7 +63,7 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshToken
 }
 
 const selectActiveSubscription = `-- name: SelectActiveSubscription :one
-SELECT id, user_id, plan_id, payment_id, start_date, end_date, created_at, deleted_at FROM subscription WHERE user_id = $1 AND end_date > NOW()
+SELECT id, user_id, plan_id, payment_id, start_date, end_date FROM subscription WHERE user_id = $1 AND end_date > NOW()
 `
 
 func (q *Queries) SelectActiveSubscription(ctx context.Context, userID string) (Subscription, error) {
@@ -76,8 +76,6 @@ func (q *Queries) SelectActiveSubscription(ctx context.Context, userID string) (
 		&i.PaymentID,
 		&i.StartDate,
 		&i.EndDate,
-		&i.CreatedAt,
-		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -127,7 +125,7 @@ func (q *Queries) SelectPrayers(ctx context.Context, arg SelectPrayersParams) ([
 }
 
 const selectRefreshTokenById = `-- name: SelectRefreshTokenById :one
-SELECT id, user_id, revoked, created_at, expires_at FROM refresh_token WHERE id = $1 AND user_id = $2
+SELECT id, user_id, revoked, expires_at FROM refresh_token WHERE id = $1 AND user_id = $2
 `
 
 type SelectRefreshTokenByIdParams struct {
@@ -142,14 +140,13 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 		&i.ID,
 		&i.UserID,
 		&i.Revoked,
-		&i.CreatedAt,
 		&i.ExpiresAt,
 	)
 	return i, err
 }
 
 const selectUserById = `-- name: SelectUserById :one
-SELECT id, created_at, deleted_at FROM "user" WHERE id = $1
+SELECT id, created_at, deleted_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
