@@ -11,17 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const checkUserExistence = `-- name: CheckUserExistence :one
-SELECT EXISTS(SELECT 1 FROM "user" WHERE id = $1)
-`
-
-func (q *Queries) CheckUserExistence(ctx context.Context, id string) (bool, error) {
-	row := q.db.QueryRow(ctx, checkUserExistence, id)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
 INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3)
 `

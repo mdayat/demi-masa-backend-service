@@ -19,7 +19,6 @@ import (
 
 type AuthServicer interface {
 	ValidateIDToken(ctx context.Context, idToken string) (*idtoken.Payload, error)
-	CheckUserExistence(ctx context.Context, userId string) (bool, error)
 	CreateRefreshToken(claims RefreshTokenClaims) (string, error)
 	ValidateRefreshToken(tokenString string) (*RefreshTokenClaims, error)
 	CreateAccessToken(claims AccessTokenClaims) (string, error)
@@ -47,16 +46,6 @@ func (a auth) ValidateIDToken(ctx context.Context, idToken string) (*idtoken.Pay
 	}
 
 	return validator.Validate(ctx, idToken, a.configs.Env.ClientId)
-}
-
-func (a auth) CheckUserExistence(ctx context.Context, userId string) (bool, error) {
-	return retry.DoWithData(
-		func() (bool, error) {
-			return a.configs.Db.Queries.CheckUserExistence(ctx, userId)
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
 }
 
 type TokenType int

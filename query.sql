@@ -7,9 +7,6 @@ SELECT * FROM "user" WHERE id = $1 AND deleted_at IS NULL;
 -- name: SelectActiveSubscription :one
 SELECT * FROM subscription WHERE user_id = $1 AND end_date > NOW();
 
--- name: CheckUserExistence :one
-SELECT EXISTS(SELECT 1 FROM "user" WHERE id = $1);
-
 -- name: InsertRefreshToken :exec
 INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3);
 

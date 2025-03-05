@@ -10,7 +10,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/dbutil"
@@ -62,19 +64,6 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid Id token")
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-
-	isUserExist, err := a.service.CheckUserExistence(ctx, payload.Subject)
-	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to check user existence")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	if isUserExist {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusConflict).Msg("user already exist")
-		http.Error(res, http.StatusText(http.StatusConflict), http.StatusConflict)
 		return
 	}
 
@@ -142,8 +131,14 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 
 	result, err := dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to register user")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusConflict).Msg("user already exist")
+			http.Error(res, http.StatusText(http.StatusConflict), http.StatusConflict)
+		} else {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to register user")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		return
 	}
 
