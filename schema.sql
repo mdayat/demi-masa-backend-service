@@ -35,11 +35,21 @@ CREATE TABLE prayer (
     ON DELETE CASCADE
 );
 
+CREATE TABLE coupon (
+  code VARCHAR(255) PRIMARY KEY,
+  influencer_username VARCHAR(255) NOT NULL,
+  quota SMALLINT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  deleted_at TIMESTAMPTZ NULL
+);
+
 CREATE TABLE invoice (
   id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
+  ref_id VARCHAR(255) NOT NULL,
   total_amount INT NOT NULL CHECK (total_amount >= 0),
   status VARCHAR(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'paid')),
+  qr_url VARCHAR(255) NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
 

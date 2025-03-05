@@ -22,5 +22,15 @@ SELECT * FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = 
 -- name: UpdatePrayerStatus :exec
 UPDATE prayer SET status = $2 WHERE id = $1;
 
+-- name: InsertInvoice :exec
+INSERT INTO invoice (id, user_id, ref_id, total_amount, qr_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6);
+
 -- name: SelectActiveInvoice :one
 SELECT * FROM invoice WHERE user_id = $1 AND expires_at > NOW();
+
+-- name: DecrementCouponQuota :execrows
+UPDATE coupon SET quota = quota - 1
+WHERE code = $1 AND quota > 0 AND deleted_at IS NULL;
+
+-- name: IncrementCouponQuota :exec
+UPDATE coupon SET quota = quota + 1 WHERE code = $1;

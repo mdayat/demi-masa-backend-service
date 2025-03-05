@@ -8,11 +8,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Coupon struct {
+	Code               string             `json:"code"`
+	InfluencerUsername string             `json:"influencer_username"`
+	Quota              int16              `json:"quota"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Invoice struct {
 	ID          pgtype.UUID        `json:"id"`
 	UserID      string             `json:"user_id"`
+	RefID       string             `json:"ref_id"`
 	TotalAmount int32              `json:"total_amount"`
 	Status      string             `json:"status"`
+	QrUrl       string             `json:"qr_url"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }

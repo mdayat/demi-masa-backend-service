@@ -11,6 +11,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const decrementCouponQuota = `-- name: DecrementCouponQuota :execrows
+UPDATE coupon SET quota = quota - 1
+WHERE code = $1 AND quota > 0 AND deleted_at IS NULL
+`
+
+func (q *Queries) DecrementCouponQuota(ctx context.Context, code string) (int64, error) {
+	result, err := q.db.Exec(ctx, decrementCouponQuota, code)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const incrementCouponQuota = `-- name: IncrementCouponQuota :exec
+UPDATE coupon SET quota = quota + 1 WHERE code = $1
+`
+
+func (q *Queries) IncrementCouponQuota(ctx context.Context, code string) error {
+	_, err := q.db.Exec(ctx, incrementCouponQuota, code)
+	return err
+}
+
+const insertInvoice = `-- name: InsertInvoice :exec
+INSERT INTO invoice (id, user_id, ref_id, total_amount, qr_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertInvoiceParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      string             `json:"user_id"`
+	RefID       string             `json:"ref_id"`
+	TotalAmount int32              `json:"total_amount"`
+	QrUrl       string             `json:"qr_url"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) error {
+	_, err := q.db.Exec(ctx, insertInvoice,
+		arg.ID,
+		arg.UserID,
+		arg.RefID,
+		arg.TotalAmount,
+		arg.QrUrl,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
 INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3)
 `
@@ -52,7 +99,7 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshToken
 }
 
 const selectActiveInvoice = `-- name: SelectActiveInvoice :one
-SELECT id, user_id, total_amount, status, expires_at, created_at FROM invoice WHERE user_id = $1 AND expires_at > NOW()
+SELECT id, user_id, ref_id, total_amount, status, qr_url, expires_at, created_at FROM invoice WHERE user_id = $1 AND expires_at > NOW()
 `
 
 func (q *Queries) SelectActiveInvoice(ctx context.Context, userID string) (Invoice, error) {
@@ -61,8 +108,10 @@ func (q *Queries) SelectActiveInvoice(ctx context.Context, userID string) (Invoi
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.RefID,
 		&i.TotalAmount,
 		&i.Status,
+		&i.QrUrl,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 	)
