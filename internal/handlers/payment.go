@@ -36,6 +36,17 @@ func NewPaymentHandler(configs configs.Configs, service services.PaymentServicer
 	}
 }
 
+type invoiceResponse struct {
+	Id          string `json:"id"`
+	RefId       string `json:"ref_id"`
+	CouponCode  string `json:"coupon_code"`
+	TotalAmount int32  `json:"total_amount"`
+	Status      string `json:"status"`
+	QrUrl       string `json:"qr_url"`
+	ExpiresAt   string `json:"expires_at"`
+	CreatedAt   string `json:"created_at"`
+}
+
 func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
@@ -50,16 +61,13 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 
 	params := httputil.SendSuccessResponseParams{StatusCode: http.StatusOK}
 	if err == nil {
-		resBody := struct {
-			Id          string `json:"id"`
-			TotalAmount int32  `json:"total_amount"`
-			Status      string `json:"status"`
-			ExpiresAt   string `json:"expires_at"`
-			CreatedAt   string `json:"created_at"`
-		}{
+		resBody := invoiceResponse{
 			Id:          invoice.ID.String(),
+			RefId:       invoice.RefID,
+			CouponCode:  invoice.CouponCode.String,
 			TotalAmount: invoice.TotalAmount,
 			Status:      invoice.Status,
+			QrUrl:       invoice.QrUrl,
 			ExpiresAt:   invoice.ExpiresAt.Time.Format(time.RFC3339),
 			CreatedAt:   invoice.CreatedAt.Time.Format(time.RFC3339),
 		}
@@ -100,7 +108,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 	}
 
 	var shouldRollbackCoupon bool
-	var isCouponCodeValid bool
+	var couponCode pgtype.Text
 
 	defer func() {
 		if shouldRollbackCoupon {
@@ -123,7 +131,8 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 		}
 
 		if affectedRows == 1 {
-			isCouponCodeValid = true
+			couponCode.String = reqBody.CouponCode
+			couponCode.Valid = true
 		}
 	}
 
@@ -131,7 +140,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 	merchantRefString := merchantRef.String()
 
 	totalAmount := reqBody.Plan.Price
-	if isCouponCodeValid {
+	if couponCode.Valid {
 		totalAmount = int(math.Round(float64(reqBody.Plan.Price) * 0.7))
 	}
 
@@ -146,7 +155,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 
 	tripayTxResponse, err := p.service.RequestTripayTx(ctx, tripayTxRequest)
 	if err != nil {
-		if isCouponCodeValid {
+		if couponCode.Valid {
 			shouldRollbackCoupon = true
 		}
 
@@ -158,17 +167,18 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 	userId := ctx.Value(userIdKey{}).(string)
 	expiresAt := time.Unix(int64(tripayTxResponse.ExpiredTime), 0)
 
-	err = p.service.InsertInvoice(ctx, repository.InsertInvoiceParams{
+	invoice, err := p.service.InsertInvoice(ctx, repository.InsertInvoiceParams{
 		ID:          pgtype.UUID{Bytes: merchantRef, Valid: true},
 		UserID:      userId,
 		RefID:       tripayTxResponse.Reference,
+		CouponCode:  couponCode,
 		TotalAmount: int32(tripayTxResponse.Amount),
 		QrUrl:       tripayTxResponse.QrURL,
 		ExpiresAt:   pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
 
 	if err != nil {
-		if isCouponCodeValid {
+		if couponCode.Valid {
 			shouldRollbackCoupon = true
 		}
 
@@ -183,14 +193,15 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resBody := struct {
-		Id          string `json:"id"`
-		TotalAmount int32  `json:"total_amount"`
-		ExpiresAt   string `json:"expires_at"`
-	}{
+	resBody := invoiceResponse{
 		Id:          merchantRefString,
-		TotalAmount: int32(tripayTxResponse.Amount),
-		ExpiresAt:   expiresAt.Format(time.RFC3339),
+		RefId:       invoice.RefID,
+		CouponCode:  invoice.CouponCode.String,
+		TotalAmount: invoice.TotalAmount,
+		Status:      invoice.Status,
+		QrUrl:       invoice.QrUrl,
+		ExpiresAt:   invoice.ExpiresAt.Time.Format(time.RFC3339),
+		CreatedAt:   invoice.CreatedAt.Time.Format(time.RFC3339),
 	}
 
 	params := httputil.SendSuccessResponseParams{

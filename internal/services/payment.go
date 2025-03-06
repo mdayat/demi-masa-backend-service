@@ -23,7 +23,7 @@ type PaymentServicer interface {
 	IncrementCouponQuota(ctx context.Context, code string) error
 	CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTxRequest
 	RequestTripayTx(ctx context.Context, tripayTxRequest tripayTxRequest) (tripayTxResponse, error)
-	InsertInvoice(ctx context.Context, arg repository.InsertInvoiceParams) error
+	InsertInvoice(ctx context.Context, arg repository.InsertInvoiceParams) (repository.Invoice, error)
 }
 
 type payment struct {
@@ -66,9 +66,9 @@ func (p payment) IncrementCouponQuota(ctx context.Context, code string) error {
 	)
 }
 
-func createSignature(tripayPrivateKey, tripayMerchantCode, merchantRef string, amount int) string {
-	key := []byte(tripayPrivateKey)
-	message := fmt.Sprintf("%s%s%d", tripayMerchantCode, merchantRef, amount)
+func (p payment) createSignature(merchantRef string, amount int) string {
+	key := []byte(p.configs.Env.TripayPrivateKey)
+	message := fmt.Sprintf("%s%s%d", p.configs.Env.TripayMerchantCode, merchantRef, amount)
 
 	hash := hmac.New(sha256.New, key)
 	hash.Write([]byte(message))
@@ -111,7 +111,7 @@ type CreateTripayTxRequestParams struct {
 }
 
 func (p payment) CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTxRequest {
-	signature := createSignature(p.configs.Env.TripayPrivateKey, p.configs.Env.TripayMerchantCode, arg.MerchantRef, arg.TotalAmount)
+	signature := p.createSignature(arg.MerchantRef, arg.TotalAmount)
 	orderItems := []orderItem{
 		{
 			Name:     arg.PlanName,
@@ -178,9 +178,9 @@ func (p payment) RequestTripayTx(ctx context.Context, tripayTxRequest tripayTxRe
 	return retry.DoWithData(retryableFunc, retry.Attempts(3), retry.LastErrorOnly(true))
 }
 
-func (p payment) InsertInvoice(ctx context.Context, arg repository.InsertInvoiceParams) error {
-	return retry.Do(
-		func() error {
+func (p payment) InsertInvoice(ctx context.Context, arg repository.InsertInvoiceParams) (repository.Invoice, error) {
+	return retry.DoWithData(
+		func() (repository.Invoice, error) {
 			return p.configs.Db.Queries.InsertInvoice(ctx, arg)
 		},
 		retry.Attempts(3),

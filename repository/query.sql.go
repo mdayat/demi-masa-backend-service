@@ -33,29 +33,43 @@ func (q *Queries) IncrementCouponQuota(ctx context.Context, code string) error {
 	return err
 }
 
-const insertInvoice = `-- name: InsertInvoice :exec
-INSERT INTO invoice (id, user_id, ref_id, total_amount, qr_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6)
+const insertInvoice = `-- name: InsertInvoice :one
+INSERT INTO invoice (id, user_id, ref_id, coupon_code, total_amount, qr_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, ref_id, coupon_code, total_amount, status, qr_url, expires_at, created_at
 `
 
 type InsertInvoiceParams struct {
 	ID          pgtype.UUID        `json:"id"`
 	UserID      string             `json:"user_id"`
 	RefID       string             `json:"ref_id"`
+	CouponCode  pgtype.Text        `json:"coupon_code"`
 	TotalAmount int32              `json:"total_amount"`
 	QrUrl       string             `json:"qr_url"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
-func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) error {
-	_, err := q.db.Exec(ctx, insertInvoice,
+func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) (Invoice, error) {
+	row := q.db.QueryRow(ctx, insertInvoice,
 		arg.ID,
 		arg.UserID,
 		arg.RefID,
+		arg.CouponCode,
 		arg.TotalAmount,
 		arg.QrUrl,
 		arg.ExpiresAt,
 	)
-	return err
+	var i Invoice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RefID,
+		&i.CouponCode,
+		&i.TotalAmount,
+		&i.Status,
+		&i.QrUrl,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
@@ -99,7 +113,7 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshToken
 }
 
 const selectActiveInvoice = `-- name: SelectActiveInvoice :one
-SELECT id, user_id, ref_id, total_amount, status, qr_url, expires_at, created_at FROM invoice WHERE user_id = $1 AND expires_at > NOW()
+SELECT id, user_id, ref_id, coupon_code, total_amount, status, qr_url, expires_at, created_at FROM invoice WHERE user_id = $1 AND status = 'unpaid' AND expires_at > NOW()
 `
 
 func (q *Queries) SelectActiveInvoice(ctx context.Context, userID string) (Invoice, error) {
@@ -109,6 +123,7 @@ func (q *Queries) SelectActiveInvoice(ctx context.Context, userID string) (Invoi
 		&i.ID,
 		&i.UserID,
 		&i.RefID,
+		&i.CouponCode,
 		&i.TotalAmount,
 		&i.Status,
 		&i.QrUrl,

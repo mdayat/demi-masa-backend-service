@@ -20,6 +20,7 @@ type Invoice struct {
 	ID          pgtype.UUID        `json:"id"`
 	UserID      string             `json:"user_id"`
 	RefID       string             `json:"ref_id"`
+	CouponCode  pgtype.Text        `json:"coupon_code"`
 	TotalAmount int32              `json:"total_amount"`
 	Status      string             `json:"status"`
 	QrUrl       string             `json:"qr_url"`
@@ -32,6 +33,7 @@ type Payment struct {
 	UserID     string             `json:"user_id"`
 	InvoiceID  pgtype.UUID        `json:"invoice_id"`
 	AmountPaid int32              `json:"amount_paid"`
+	Status     string             `json:"status"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 

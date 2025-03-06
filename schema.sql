@@ -47,8 +47,9 @@ CREATE TABLE invoice (
   id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
   ref_id VARCHAR(255) NOT NULL,
+  coupon_code VARCHAR(255) NULL,
   total_amount INT NOT NULL CHECK (total_amount >= 0),
-  status VARCHAR(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'paid')),
+  status VARCHAR(16) DEFAULT 'unpaid' NOT NULL CHECK (status IN ('unpaid', 'paid', 'cancelled')),
   qr_url VARCHAR(255) NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -57,12 +58,18 @@ CREATE TABLE invoice (
     FOREIGN KEY (user_id)
     REFERENCES "user"(id)
     ON UPDATE CASCADE
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_invoice_coupon_code
+    FOREIGN KEY (coupon_code)
+    REFERENCES coupon(coupon_code)
+    ON UPDATE CASCADE
     ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX unique_invoice_user_id_active
+CREATE UNIQUE INDEX unique_invoice_user_id_unpaid
   ON invoice(user_id)
-  WHERE expires_at > NOW();
+  WHERE status = 'unpaid' AND expires_at > NOW();
 
 CREATE TABLE payment (
   id UUID PRIMARY KEY,
