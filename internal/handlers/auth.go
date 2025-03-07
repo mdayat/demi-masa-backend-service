@@ -1,22 +1,20 @@
 package handlers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
-	"github.com/mdayat/demi-masa/internal/dbutil"
 	"github.com/mdayat/demi-masa/internal/httputil"
+	"github.com/mdayat/demi-masa/internal/retryutil"
 	"github.com/mdayat/demi-masa/internal/services"
 	"github.com/mdayat/demi-masa/repository"
 	"github.com/rs/zerolog/log"
@@ -40,12 +38,6 @@ func NewAuthHandler(configs configs.Configs, service services.AuthServicer) Auth
 	}
 }
 
-type registrationResult struct {
-	user         repository.User
-	refreshToken string
-	accessToken  string
-}
-
 func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
@@ -67,69 +59,7 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	retryableFunc := func(qtx *repository.Queries) (registrationResult, error) {
-		user, err := qtx.InsertUser(ctx, payload.Subject)
-		if err != nil {
-			return registrationResult{}, fmt.Errorf("failed to insert user: %w", err)
-		}
-
-		now := time.Now()
-		refreshTokenClaims := services.RefreshTokenClaims{
-			Type: services.Refresh,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ID:        uuid.NewString(),
-				ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
-				IssuedAt:  jwt.NewNumericDate(now),
-				Issuer:    a.configs.Env.OriginURL,
-				Subject:   user.ID,
-			},
-		}
-
-		refreshToken, err := a.service.CreateRefreshToken(refreshTokenClaims)
-		if err != nil {
-			return registrationResult{}, fmt.Errorf("failed to create refresh token: %w", err)
-		}
-
-		accessTokenClaims := services.AccessTokenClaims{
-			Type: services.Access,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
-				IssuedAt:  jwt.NewNumericDate(now),
-				Issuer:    a.configs.Env.OriginURL,
-				Subject:   user.ID,
-			},
-		}
-
-		accessToken, err := a.service.CreateAccessToken(accessTokenClaims)
-		if err != nil {
-			return registrationResult{}, fmt.Errorf("failed to create access token: %w", err)
-		}
-
-		refreshTokenId, err := uuid.Parse(refreshTokenClaims.ID)
-		if err != nil {
-			return registrationResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
-		}
-
-		err = qtx.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
-			ID:        pgtype.UUID{Bytes: refreshTokenId, Valid: true},
-			UserID:    user.ID,
-			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
-		})
-
-		if err != nil {
-			return registrationResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
-		}
-
-		registrationResult := registrationResult{
-			user:         user,
-			refreshToken: refreshToken,
-			accessToken:  accessToken,
-		}
-
-		return registrationResult, nil
-	}
-
-	result, err := dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
+	result, err := a.service.RegisterUser(ctx, payload.Subject)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -147,9 +77,9 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		RefreshToken string `json:"refresh_token"`
 		AccessToken  string `json:"access_token"`
 	}{
-		UserId:       result.user.ID,
-		RefreshToken: result.refreshToken,
-		AccessToken:  result.accessToken,
+		UserId:       result.User.ID,
+		RefreshToken: result.RefreshToken,
+		AccessToken:  result.AccessToken,
 	}
 
 	params := httputil.SendSuccessResponseParams{
@@ -165,67 +95,6 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	}
 
 	logger.Info().Int("status_code", http.StatusCreated).Msg("successfully registered user")
-}
-
-type authenticateUserResult struct {
-	refreshToken string
-	accessToken  string
-}
-
-func authenticateUser(ctx context.Context, auth auth, userId string) (authenticateUserResult, error) {
-	now := time.Now()
-	refreshTokenClaims := services.RefreshTokenClaims{
-		Type: services.Refresh,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ID:        uuid.NewString(),
-			ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			Issuer:    auth.configs.Env.OriginURL,
-			Subject:   userId,
-		},
-	}
-
-	refreshToken, err := auth.service.CreateRefreshToken(refreshTokenClaims)
-	if err != nil {
-		return authenticateUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
-	}
-
-	accessTokenClaims := services.AccessTokenClaims{
-		Type: services.Access,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			Issuer:    auth.configs.Env.OriginURL,
-			Subject:   userId,
-		},
-	}
-
-	accessToken, err := auth.service.CreateAccessToken(accessTokenClaims)
-	if err != nil {
-		return authenticateUserResult{}, fmt.Errorf("failed to create access token: %w", err)
-	}
-
-	refreshTokenId, err := uuid.Parse(refreshTokenClaims.ID)
-	if err != nil {
-		return authenticateUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
-	}
-
-	err = auth.service.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
-		ID:        pgtype.UUID{Bytes: refreshTokenId, Valid: true},
-		UserID:    userId,
-		ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
-	})
-
-	if err != nil {
-		return authenticateUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
-	}
-
-	authenticateUserResult := authenticateUserResult{
-		refreshToken: refreshToken,
-		accessToken:  accessToken,
-	}
-
-	return authenticateUserResult, nil
 }
 
 func (a auth) Login(res http.ResponseWriter, req *http.Request) {
@@ -249,7 +118,10 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	user, err := a.service.SelectUserById(ctx, payload.Subject)
+	user, err := retryutil.RetryWithData(func() (repository.User, error) {
+		return a.configs.Db.Queries.SelectUserById(ctx, payload.Subject)
+	})
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("user not found")
@@ -261,7 +133,7 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := authenticateUser(ctx, a, user.ID)
+	result, err := a.service.AuthenticateUser(ctx, user.ID)
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to authenticate user")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -274,8 +146,8 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		AccessToken  string `json:"access_token"`
 	}{
 		UserId:       user.ID,
-		RefreshToken: result.refreshToken,
-		AccessToken:  result.accessToken,
+		RefreshToken: result.RefreshToken,
+		AccessToken:  result.AccessToken,
 	}
 
 	params := httputil.SendSuccessResponseParams{
@@ -310,7 +182,18 @@ func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	refreshToken, err := a.service.SelectRefreshTokenById(ctx, services.SelectRefreshTokenByIdParams{Jti: claims.ID, UserId: claims.Subject})
+	refreshToken, err := retryutil.RetryWithData(func() (repository.RefreshToken, error) {
+		refreshTokenUUID, err := uuid.Parse(claims.ID)
+		if err != nil {
+			return repository.RefreshToken{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+		}
+
+		return a.configs.Db.Queries.SelectRefreshTokenById(ctx, repository.SelectRefreshTokenByIdParams{
+			ID:     pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
+			UserID: claims.Subject,
+		})
+	})
+
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select refresh token")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

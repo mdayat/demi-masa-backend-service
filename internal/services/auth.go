@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/avast/retry-go/v4"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/dbutil"
+	"github.com/mdayat/demi-masa/internal/retryutil"
 	"github.com/mdayat/demi-masa/repository"
 	"google.golang.org/api/idtoken"
 )
@@ -23,10 +23,9 @@ type AuthServicer interface {
 	ValidateRefreshToken(tokenString string) (*RefreshTokenClaims, error)
 	CreateAccessToken(claims AccessTokenClaims) (string, error)
 	ValidateAccessToken(tokenString string) (*AccessTokenClaims, error)
-	SelectUserById(ctx context.Context, userId string) (repository.User, error)
-	InsertRefreshToken(ctx context.Context, arg repository.InsertRefreshTokenParams) error
-	SelectRefreshTokenById(ctx context.Context, arg SelectRefreshTokenByIdParams) (repository.RefreshToken, error)
 	RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) (rotateRefreshTokenResult, error)
+	RegisterUser(ctx context.Context, userId string) (RegisterUserResult, error)
+	AuthenticateUser(ctx context.Context, userId string) (AuthenticateUserResult, error)
 }
 
 type auth struct {
@@ -131,49 +130,6 @@ func (a auth) ValidateAccessToken(tokenString string) (*AccessTokenClaims, error
 	return claims, nil
 }
 
-func (a auth) SelectUserById(ctx context.Context, userId string) (repository.User, error) {
-	return retry.DoWithData(
-		func() (repository.User, error) {
-			return a.configs.Db.Queries.SelectUserById(ctx, userId)
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
-}
-
-func (a auth) InsertRefreshToken(ctx context.Context, arg repository.InsertRefreshTokenParams) error {
-	return retry.Do(
-		func() error {
-			return a.configs.Db.Queries.InsertRefreshToken(ctx, arg)
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
-}
-
-type SelectRefreshTokenByIdParams struct {
-	Jti    string
-	UserId string
-}
-
-func (a auth) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshTokenByIdParams) (repository.RefreshToken, error) {
-	refreshTokenId, err := uuid.Parse(arg.Jti)
-	if err != nil {
-		return repository.RefreshToken{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
-	}
-
-	return retry.DoWithData(
-		func() (repository.RefreshToken, error) {
-			return a.configs.Db.Queries.SelectRefreshTokenById(ctx, repository.SelectRefreshTokenByIdParams{
-				ID:     pgtype.UUID{Bytes: refreshTokenId, Valid: true},
-				UserID: arg.UserId,
-			})
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
-}
-
 type RotateRefreshTokenParams struct {
 	Jti       string
 	UserId    string
@@ -259,4 +215,139 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 	}
 
 	return dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
+}
+
+type RegisterUserResult struct {
+	User         repository.User
+	RefreshToken string
+	AccessToken  string
+}
+
+func (a auth) RegisterUser(ctx context.Context, userId string) (RegisterUserResult, error) {
+	retryableFunc := func(qtx *repository.Queries) (RegisterUserResult, error) {
+		user, err := qtx.InsertUser(ctx, userId)
+		if err != nil {
+			return RegisterUserResult{}, fmt.Errorf("failed to insert user: %w", err)
+		}
+
+		now := time.Now()
+		refreshTokenClaims := RefreshTokenClaims{
+			Type: Refresh,
+			RegisteredClaims: jwt.RegisteredClaims{
+				ID:        uuid.NewString(),
+				ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(now),
+				Issuer:    a.configs.Env.OriginURL,
+				Subject:   user.ID,
+			},
+		}
+
+		refreshToken, err := a.CreateRefreshToken(refreshTokenClaims)
+		if err != nil {
+			return RegisterUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
+		}
+
+		accessTokenClaims := AccessTokenClaims{
+			Type: Access,
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+				IssuedAt:  jwt.NewNumericDate(now),
+				Issuer:    a.configs.Env.OriginURL,
+				Subject:   user.ID,
+			},
+		}
+
+		accessToken, err := a.CreateAccessToken(accessTokenClaims)
+		if err != nil {
+			return RegisterUserResult{}, fmt.Errorf("failed to create access token: %w", err)
+		}
+
+		refreshTokenUUID, err := uuid.Parse(refreshTokenClaims.ID)
+		if err != nil {
+			return RegisterUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+		}
+
+		err = qtx.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
+			ID:        pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
+			UserID:    user.ID,
+			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
+		})
+
+		if err != nil {
+			return RegisterUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+		}
+
+		RegisterUserResult := RegisterUserResult{
+			User:         user,
+			RefreshToken: refreshToken,
+			AccessToken:  accessToken,
+		}
+
+		return RegisterUserResult, nil
+	}
+
+	return dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
+}
+
+type AuthenticateUserResult struct {
+	RefreshToken string
+	AccessToken  string
+}
+
+func (a auth) AuthenticateUser(ctx context.Context, userId string) (AuthenticateUserResult, error) {
+	now := time.Now()
+	refreshTokenClaims := RefreshTokenClaims{
+		Type: Refresh,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
+			ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    a.configs.Env.OriginURL,
+			Subject:   userId,
+		},
+	}
+
+	refreshToken, err := a.CreateRefreshToken(refreshTokenClaims)
+	if err != nil {
+		return AuthenticateUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
+	}
+
+	accessTokenClaims := AccessTokenClaims{
+		Type: Access,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    a.configs.Env.OriginURL,
+			Subject:   userId,
+		},
+	}
+
+	accessToken, err := a.CreateAccessToken(accessTokenClaims)
+	if err != nil {
+		return AuthenticateUserResult{}, fmt.Errorf("failed to create access token: %w", err)
+	}
+
+	refreshTokenUUID, err := uuid.Parse(refreshTokenClaims.ID)
+	if err != nil {
+		return AuthenticateUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+	}
+
+	err = retryutil.RetryWithoutData(func() error {
+		return a.configs.Db.Queries.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
+			ID:        pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
+			UserID:    userId,
+			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
+		})
+	})
+
+	if err != nil {
+		return AuthenticateUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+	}
+
+	AuthenticateUserResult := AuthenticateUserResult{
+		RefreshToken: refreshToken,
+		AccessToken:  accessToken,
+	}
+
+	return AuthenticateUserResult, nil
 }

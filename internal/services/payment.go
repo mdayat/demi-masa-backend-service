@@ -24,9 +24,6 @@ import (
 )
 
 type PaymentServicer interface {
-	SelectActiveInvoice(ctx context.Context, userId string) (repository.Invoice, error)
-	DecrementCouponQuota(ctx context.Context, code string) (int64, error)
-	IncrementCouponQuota(ctx context.Context, code string) error
 	CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTxRequest
 	RequestTripayTx(ctx context.Context, tripayTxRequest tripayTxRequest) (tripayTxResponse, error)
 	ValidateCallbackSignature(tripaySignature string, reqBody []byte) error
@@ -42,36 +39,6 @@ func NewPaymentService(configs configs.Configs) PaymentServicer {
 	return &payment{
 		configs: configs,
 	}
-}
-
-func (p payment) SelectActiveInvoice(ctx context.Context, userId string) (repository.Invoice, error) {
-	return retry.DoWithData(
-		func() (repository.Invoice, error) {
-			return p.configs.Db.Queries.SelectActiveInvoice(ctx, userId)
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
-}
-
-func (p payment) DecrementCouponQuota(ctx context.Context, code string) (int64, error) {
-	return retry.DoWithData(
-		func() (int64, error) {
-			return p.configs.Db.Queries.DecrementCouponQuota(ctx, code)
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
-}
-
-func (p payment) IncrementCouponQuota(ctx context.Context, code string) error {
-	return retry.Do(
-		func() error {
-			return p.configs.Db.Queries.IncrementCouponQuota(ctx, code)
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
 }
 
 func (p payment) createRequestSignature(merchantRef string, amount int) string {

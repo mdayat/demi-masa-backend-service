@@ -65,7 +65,7 @@ func (r rest) Start() error {
 		router.Use(customMiddleware.Authenticate)
 
 		userService := services.NewUserService(r.configs)
-		userHandler := handlers.NewUserHandler(r.configs, authService, userService)
+		userHandler := handlers.NewUserHandler(r.configs, userService)
 		router.Get("/users/me", userHandler.GetMe)
 		router.Get("/subscriptions/active", userHandler.GetActiveSubscription)
 

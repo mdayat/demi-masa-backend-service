@@ -56,7 +56,10 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 	logger := log.Ctx(ctx).With().Logger()
 
 	userId := ctx.Value(userIdKey{}).(string)
-	invoice, err := p.service.SelectActiveInvoice(ctx, userId)
+	invoice, err := retryutil.RetryWithData(func() (repository.Invoice, error) {
+		return p.configs.Db.Queries.SelectActiveInvoice(ctx, userId)
+	})
+
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select active invoice")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -115,7 +118,11 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 
 	defer func() {
 		if shouldRollbackCoupon {
-			if err := p.service.IncrementCouponQuota(ctx, reqBody.CouponCode); err != nil {
+			err := retryutil.RetryWithoutData(func() error {
+				return p.configs.Db.Queries.IncrementCouponQuota(ctx, reqBody.CouponCode)
+			})
+
+			if err != nil {
 				logger.
 					Error().
 					Err(err).Int("status_code", http.StatusInternalServerError).
@@ -126,7 +133,10 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 	}()
 
 	if reqBody.CouponCode != "" {
-		affectedRows, err := p.service.DecrementCouponQuota(ctx, reqBody.CouponCode)
+		affectedRows, err := retryutil.RetryWithData(func() (int64, error) {
+			return p.configs.Db.Queries.DecrementCouponQuota(ctx, reqBody.CouponCode)
+		})
+
 		if err != nil {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to decrement coupon quota")
 			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

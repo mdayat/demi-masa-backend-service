@@ -8,7 +8,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
+	"github.com/mdayat/demi-masa/internal/retryutil"
 	"github.com/mdayat/demi-masa/internal/services"
+	"github.com/mdayat/demi-masa/repository"
 	"github.com/rs/zerolog/log"
 )
 
@@ -18,16 +20,14 @@ type UserHandler interface {
 }
 
 type user struct {
-	configs     configs.Configs
-	authService services.AuthServicer
-	userService services.UserServicer
+	configs configs.Configs
+	service services.UserServicer
 }
 
-func NewUserHandler(configs configs.Configs, authService services.AuthServicer, userService services.UserServicer) UserHandler {
+func NewUserHandler(configs configs.Configs, service services.UserServicer) UserHandler {
 	return &user{
-		configs:     configs,
-		authService: authService,
-		userService: userService,
+		configs: configs,
+		service: service,
 	}
 }
 
@@ -42,7 +42,10 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	user, err := u.authService.SelectUserById(ctx, userId)
+	user, err := retryutil.RetryWithData(func() (repository.User, error) {
+		return u.configs.Db.Queries.SelectUserById(ctx, userId)
+	})
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("user not found")
@@ -79,7 +82,10 @@ func (u user) GetActiveSubscription(res http.ResponseWriter, req *http.Request) 
 	logger := log.Ctx(ctx).With().Logger()
 
 	userId := ctx.Value(userIdKey{}).(string)
-	subscription, err := u.userService.SelectActiveSubscription(ctx, userId)
+	subscription, err := retryutil.RetryWithData(func() (repository.Subscription, error) {
+		return u.configs.Db.Queries.SelectActiveSubscription(ctx, userId)
+	})
+
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select active subscription")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

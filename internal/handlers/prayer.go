@@ -2,14 +2,17 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
+	"github.com/mdayat/demi-masa/internal/retryutil"
 	"github.com/mdayat/demi-masa/internal/services"
 	"github.com/mdayat/demi-masa/repository"
 	"github.com/rs/zerolog/log"
@@ -73,7 +76,10 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 		selectPrayersParams.Day = pgtype.Int2{Int16: int16(day), Valid: true}
 	}
 
-	prayers, err := p.service.SelectPrayers(ctx, selectPrayersParams)
+	prayers, err := retryutil.RetryWithData(func() ([]repository.Prayer, error) {
+		return p.configs.Db.Queries.SelectPrayers(ctx, selectPrayersParams)
+	})
+
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select prayers")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -122,9 +128,16 @@ func (p prayer) UpdatePrayerStatus(res http.ResponseWriter, req *http.Request) {
 	}
 
 	prayerId := chi.URLParam(req, "prayerId")
-	err := p.service.UpdatePrayerStatus(ctx, services.UpdatePrayerStatusParams{
-		Id:     prayerId,
-		Status: reqBody.Status,
+	err := retryutil.RetryWithoutData(func() error {
+		prayerUUID, err := uuid.Parse(prayerId)
+		if err != nil {
+			return fmt.Errorf("failed to parse prayer Id to UUID: %w", err)
+		}
+
+		return p.configs.Db.Queries.UpdatePrayerStatus(ctx, repository.UpdatePrayerStatusParams{
+			ID:     pgtype.UUID{Bytes: prayerUUID, Valid: true},
+			Status: reqBody.Status,
+		})
 	})
 
 	if err != nil {
