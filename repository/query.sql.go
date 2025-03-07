@@ -24,6 +24,15 @@ func (q *Queries) DecrementCouponQuota(ctx context.Context, code string) (int64,
 	return result.RowsAffected(), nil
 }
 
+const deleteUserByID = `-- name: DeleteUserByID :exec
+DELETE FROM "user" WHERE id = $1
+`
+
+func (q *Queries) DeleteUserByID(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteUserByID, id)
+	return err
+}
+
 const incrementCouponQuota = `-- name: IncrementCouponQuota :exec
 UPDATE coupon SET quota = quota + 1 WHERE code = $1
 `
@@ -147,13 +156,13 @@ func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscription
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO "user" (id) VALUES ($1) RETURNING id, created_at, deleted_at
+INSERT INTO "user" (id) VALUES ($1) RETURNING id, created_at
 `
 
 func (q *Queries) InsertUser(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, insertUser, id)
 	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt, &i.DeletedAt)
+	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
 
@@ -300,24 +309,24 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 }
 
 const selectUserById = `-- name: SelectUserById :one
-SELECT id, created_at, deleted_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
+SELECT id, created_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, selectUserById, id)
 	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt, &i.DeletedAt)
+	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
 
 const selectUserByInvoiceID = `-- name: SelectUserByInvoiceID :one
-SELECT u.id, u.created_at, u.deleted_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
+SELECT u.id, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
 `
 
 func (q *Queries) SelectUserByInvoiceID(ctx context.Context, id pgtype.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, selectUserByInvoiceID, id)
 	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt, &i.DeletedAt)
+	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
 

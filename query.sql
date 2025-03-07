@@ -7,6 +7,9 @@ SELECT * FROM "user" WHERE id = $1 AND deleted_at IS NULL;
 -- name: SelectUserByInvoiceID :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;
 
+-- name: DeleteUserByID :exec
+DELETE FROM "user" WHERE id = $1;
+
 -- name: InsertSubscription :exec
 INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date) VALUES ($1, $2, $3, $4, $5, $6);
 

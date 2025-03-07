@@ -75,5 +75,4 @@ type Subscription struct {
 type User struct {
 	ID        string             `json:"id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }

@@ -55,7 +55,7 @@ func (r rest) Start() error {
 	authHandler := handlers.NewAuthHandler(r.configs, authService)
 	r.router.Post("/auth/register", authHandler.Register)
 	r.router.Post("/auth/login", authHandler.Login)
-	r.router.Post("/auth/refresh", authHandler.Refresh)
+	r.router.Get("/auth/refresh", authHandler.Refresh)
 
 	paymentService := services.NewPaymentService(r.configs)
 	paymentHandler := handlers.NewPaymentHandler(r.configs, paymentService)
@@ -67,6 +67,7 @@ func (r rest) Start() error {
 		userService := services.NewUserService(r.configs)
 		userHandler := handlers.NewUserHandler(r.configs, userService)
 		router.Get("/users/me", userHandler.GetMe)
+		router.Delete("/users/{userId}", userHandler.DeleteUser)
 		router.Get("/subscriptions/active", userHandler.GetActiveSubscription)
 
 		prayerService := services.NewPrayerService(r.configs)
