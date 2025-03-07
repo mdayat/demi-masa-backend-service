@@ -62,3 +62,6 @@ INSERT INTO payment (id, user_id, invoice_id, amount_paid, status) VALUES ($1, $
 
 -- name: SelectPlanByInvoiceId :one
 SELECT p.* FROM invoice i JOIN plan p ON i.plan_id = p.id WHERE i.id = $1;
+
+-- name: SelectPlans :many
+SELECT * FROM plan WHERE deleted_at IS NULL;

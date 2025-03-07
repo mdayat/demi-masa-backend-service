@@ -261,6 +261,37 @@ func (q *Queries) SelectPlanByInvoiceId(ctx context.Context, id pgtype.UUID) (Pl
 	return i, err
 }
 
+const selectPlans = `-- name: SelectPlans :many
+SELECT id, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE deleted_at IS NULL
+`
+
+func (q *Queries) SelectPlans(ctx context.Context) ([]Plan, error) {
+	rows, err := q.db.Query(ctx, selectPlans)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Plan
+	for rows.Next() {
+		var i Plan
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Price,
+			&i.DurationInMonths,
+			&i.CreatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const selectPrayers = `-- name: SelectPrayers :many
 SELECT id, user_id, name, status, year, month, day FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = $4 OR $4 IS NULL)
 `
