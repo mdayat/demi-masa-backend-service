@@ -38,6 +38,17 @@ func NewAuthHandler(configs configs.Configs, service services.AuthServicer) Auth
 	}
 }
 
+type userResponse struct {
+	Id        string  `json:"user_id"`
+	Email     string  `json:"email"`
+	Name      string  `json:"name"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	City      string  `json:"city"`
+	Timezone  string  `json:"timezone"`
+	CreatedAt string  `json:"created_at"`
+}
+
 func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
@@ -78,13 +89,22 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	}
 
 	resBody := struct {
-		UserId       string `json:"user_id"`
-		RefreshToken string `json:"refresh_token"`
-		AccessToken  string `json:"access_token"`
+		RefreshToken string       `json:"refresh_token"`
+		AccessToken  string       `json:"access_token"`
+		User         userResponse `json:"user"`
 	}{
-		UserId:       result.User.ID,
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
+		User: userResponse{
+			Id:        result.User.ID,
+			Email:     result.User.Email,
+			Name:      result.User.Name,
+			Latitude:  result.User.Coordinates.P.Y,
+			Longitude: result.User.Coordinates.P.X,
+			City:      result.User.City,
+			Timezone:  result.User.Timezone,
+			CreatedAt: result.User.CreatedAt.Time.Format(time.RFC3339),
+		},
 	}
 
 	params := httputil.SendSuccessResponseParams{
@@ -146,13 +166,22 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 	}
 
 	resBody := struct {
-		UserId       string `json:"user_id"`
-		RefreshToken string `json:"refresh_token"`
-		AccessToken  string `json:"access_token"`
+		RefreshToken string       `json:"refresh_token"`
+		AccessToken  string       `json:"access_token"`
+		User         userResponse `json:"user"`
 	}{
-		UserId:       user.ID,
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
+		User: userResponse{
+			Id:        user.ID,
+			Email:     user.Email,
+			Name:      user.Name,
+			Latitude:  user.Coordinates.P.Y,
+			Longitude: user.Coordinates.P.X,
+			City:      user.City,
+			Timezone:  user.Timezone,
+			CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
+		},
 	}
 
 	params := httputil.SendSuccessResponseParams{

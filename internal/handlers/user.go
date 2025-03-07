@@ -62,9 +62,23 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 	}
 
 	resBody := struct {
-		UserId string `json:"user_id"`
+		Id        string  `json:"user_id"`
+		Email     string  `json:"email"`
+		Name      string  `json:"name"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		City      string  `json:"city"`
+		Timezone  string  `json:"timezone"`
+		CreatedAt string  `json:"created_at"`
 	}{
-		UserId: user.ID,
+		Id:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		Latitude:  user.Coordinates.P.Y,
+		Longitude: user.Coordinates.P.X,
+		City:      user.City,
+		Timezone:  user.Timezone,
+		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
 	}
 
 	params := httputil.SendSuccessResponseParams{
@@ -148,8 +162,8 @@ func (u user) UpdateUserCoordinates(res http.ResponseWriter, req *http.Request) 
 	logger := log.Ctx(ctx).With().Logger()
 
 	var reqBody struct {
-		Latitude  float64 `json:"latitude" validate:"required"`
-		Longitude float64 `json:"longitude" validate:"required"`
+		Latitude  float64 `json:"latitude" validate:"required,latitude"`
+		Longitude float64 `json:"longitude" validate:"required,longitude"`
 	}
 
 	if err := httputil.DecodeAndValidate(req, u.configs.Validate, &reqBody); err != nil {
