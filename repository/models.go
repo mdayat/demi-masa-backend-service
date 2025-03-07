@@ -77,5 +77,7 @@ type User struct {
 	Email       string             `json:"email"`
 	Name        string             `json:"name"`
 	Coordinates pgtype.Point       `json:"coordinates"`
+	City        string             `json:"city"`
+	Timezone    string             `json:"timezone"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }

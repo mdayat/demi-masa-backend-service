@@ -176,6 +176,8 @@ func (u user) UpdateUserCoordinates(res http.ResponseWriter, req *http.Request) 
 		return u.configs.Db.Queries.UpdateUserCoordinatesById(ctx, repository.UpdateUserCoordinatesByIdParams{
 			ID:          userId,
 			Coordinates: pgtype.Point{P: pgtype.Vec2{X: reqBody.Longitude, Y: reqBody.Latitude}, Valid: true},
+			City:        result.City,
+			Timezone:    result.Timezone,
 		})
 	})
 

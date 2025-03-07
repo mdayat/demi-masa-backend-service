@@ -156,7 +156,7 @@ func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscription
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO "user" (id, email, name, coordinates) VALUES ($1, $2, $3, $4) RETURNING id, email, name, coordinates, created_at
+INSERT INTO "user" (id, email, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, name, coordinates, city, timezone, created_at
 `
 
 type InsertUserParams struct {
@@ -164,6 +164,8 @@ type InsertUserParams struct {
 	Email       string       `json:"email"`
 	Name        string       `json:"name"`
 	Coordinates pgtype.Point `json:"coordinates"`
+	City        string       `json:"city"`
+	Timezone    string       `json:"timezone"`
 }
 
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, error) {
@@ -172,6 +174,8 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		arg.Email,
 		arg.Name,
 		arg.Coordinates,
+		arg.City,
+		arg.Timezone,
 	)
 	var i User
 	err := row.Scan(
@@ -179,6 +183,8 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		&i.Email,
 		&i.Name,
 		&i.Coordinates,
+		&i.City,
+		&i.Timezone,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -358,7 +364,7 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 }
 
 const selectUserById = `-- name: SelectUserById :one
-SELECT id, email, name, coordinates, created_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
@@ -369,13 +375,15 @@ func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
 		&i.Email,
 		&i.Name,
 		&i.Coordinates,
+		&i.City,
+		&i.Timezone,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const selectUserByInvoiceID = `-- name: SelectUserByInvoiceID :one
-SELECT u.id, u.email, u.name, u.coordinates, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
+SELECT u.id, u.email, u.name, u.coordinates, u.city, u.timezone, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
 `
 
 func (q *Queries) SelectUserByInvoiceID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -386,6 +394,8 @@ func (q *Queries) SelectUserByInvoiceID(ctx context.Context, id pgtype.UUID) (Us
 		&i.Email,
 		&i.Name,
 		&i.Coordinates,
+		&i.City,
+		&i.Timezone,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -406,15 +416,22 @@ func (q *Queries) UpdatePrayerStatus(ctx context.Context, arg UpdatePrayerStatus
 }
 
 const updateUserCoordinatesById = `-- name: UpdateUserCoordinatesById :exec
-UPDATE "user" SET coordinates = $2 WHERE id = $1
+UPDATE "user" SET coordinates = $2, city = $3, timezone = $4 WHERE id = $1
 `
 
 type UpdateUserCoordinatesByIdParams struct {
 	ID          string       `json:"id"`
 	Coordinates pgtype.Point `json:"coordinates"`
+	City        string       `json:"city"`
+	Timezone    string       `json:"timezone"`
 }
 
 func (q *Queries) UpdateUserCoordinatesById(ctx context.Context, arg UpdateUserCoordinatesByIdParams) error {
-	_, err := q.db.Exec(ctx, updateUserCoordinatesById, arg.ID, arg.Coordinates)
+	_, err := q.db.Exec(ctx, updateUserCoordinatesById,
+		arg.ID,
+		arg.Coordinates,
+		arg.City,
+		arg.Timezone,
+	)
 	return err
 }

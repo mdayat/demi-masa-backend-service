@@ -319,12 +319,13 @@ type registerUserResult struct {
 
 func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error) {
 	retryableFunc := func(qtx *repository.Queries) (registerUserResult, error) {
-		defaultCoordinates := pgtype.Vec2{X: 106.865036, Y: -6.175110} // the default coordinates is Jakarta
 		user, err := qtx.InsertUser(ctx, repository.InsertUserParams{
 			ID:          arg.UserId,
 			Email:       arg.UserEmail,
 			Name:        arg.UserName,
-			Coordinates: pgtype.Point{P: defaultCoordinates, Valid: true},
+			Coordinates: pgtype.Point{P: pgtype.Vec2{X: 106.865036, Y: -6.175110}, Valid: true},
+			City:        "Jakarta",
+			Timezone:    "WIB",
 		})
 
 		if err != nil {
