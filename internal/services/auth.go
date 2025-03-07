@@ -217,6 +217,56 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 	return dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
 }
 
+type prayerName string
+
+const (
+	subuh  prayerName = "subuh"
+	zuhur  prayerName = "zuhur"
+	asar   prayerName = "asar"
+	magrib prayerName = "magrib"
+	isya   prayerName = "isya"
+)
+
+func (a auth) createInsertPrayersParams(userId string) []repository.InsertPrayersParams {
+	now := time.Now()
+	firstDayOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	nextMonth := firstDayOfThisMonth.AddDate(0, 1, 0)
+	lastDayOfThisMonth := nextMonth.AddDate(0, 0, -1)
+	numOfDaysOfThisMonth := lastDayOfThisMonth.Day()
+
+	numOfPrayersDaily := 5
+	insertPrayersParams := make([]repository.InsertPrayersParams, 0, numOfDaysOfThisMonth*numOfPrayersDaily)
+
+	var prayerName prayerName
+	for day := now.Day(); day <= numOfDaysOfThisMonth; day++ {
+		for i := 1; i <= numOfPrayersDaily; i++ {
+			switch i {
+			case 1:
+				prayerName = subuh
+			case 2:
+				prayerName = zuhur
+			case 3:
+				prayerName = asar
+			case 4:
+				prayerName = magrib
+			case 5:
+				prayerName = isya
+			}
+
+			insertPrayersParams = append(insertPrayersParams, repository.InsertPrayersParams{
+				ID:     pgtype.UUID{Bytes: uuid.New(), Valid: true},
+				UserID: userId,
+				Name:   string(prayerName),
+				Year:   int16(now.Year()),
+				Month:  int16(now.Month()),
+				Day:    int16(day),
+			})
+		}
+	}
+
+	return insertPrayersParams
+}
+
 type RegisterUserResult struct {
 	User         repository.User
 	RefreshToken string
@@ -228,6 +278,12 @@ func (a auth) RegisterUser(ctx context.Context, userId string) (RegisterUserResu
 		user, err := qtx.InsertUser(ctx, userId)
 		if err != nil {
 			return RegisterUserResult{}, fmt.Errorf("failed to insert user: %w", err)
+		}
+
+		insertPrayersParams := a.createInsertPrayersParams(userId)
+		_, err = qtx.InsertPrayers(ctx, insertPrayersParams)
+		if err != nil {
+			return RegisterUserResult{}, fmt.Errorf("failed to insert prayers: %w", err)
 		}
 
 		now := time.Now()

@@ -22,6 +22,10 @@ SELECT * FROM refresh_token WHERE id = $1 AND user_id = $2;
 -- name: RevokeRefreshToken :exec
 UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2;
 
+-- name: InsertPrayers :copyfrom
+INSERT INTO prayer (id, user_id, name, year, month, day)
+VALUES ($1, $2, $3, $4, $5, $6);
+
 -- name: SelectPrayers :many
 SELECT * FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = sqlc.narg('day') OR sqlc.narg('day') IS NULL);
 

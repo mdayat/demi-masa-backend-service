@@ -97,6 +97,15 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) er
 	return err
 }
 
+type InsertPrayersParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID string      `json:"user_id"`
+	Name   string      `json:"name"`
+	Year   int16       `json:"year"`
+	Month  int16       `json:"month"`
+	Day    int16       `json:"day"`
+}
+
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
 INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3)
 `

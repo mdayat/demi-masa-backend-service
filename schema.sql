@@ -21,7 +21,7 @@ CREATE TABLE prayer (
   id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
   name VARCHAR(16) NOT NULL CHECK (name IN ('subuh', 'zuhur', 'asar', 'magrib', 'isya')),
-  status VARCHAR(16) NOT NULL CHECK (status IN ('on_time', 'late', 'missed')),
+  status VARCHAR(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'on_time', 'late', 'missed')),
   year SMALLINT NOT NULL,
   month SMALLINT NOT NULL,
   day SMALLINT NOT NULL,
