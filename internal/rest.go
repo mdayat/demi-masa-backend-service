@@ -68,6 +68,7 @@ func (r rest) Start() error {
 		userHandler := handlers.NewUserHandler(r.configs, userService)
 		router.Get("/users/me", userHandler.GetMe)
 		router.Delete("/users/{userId}", userHandler.DeleteUser)
+		router.Put("/users/{userId}/coordinates", userHandler.DeleteUser)
 		router.Get("/subscriptions/active", userHandler.GetActiveSubscription)
 
 		prayerService := services.NewPrayerService(r.configs)

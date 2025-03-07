@@ -73,6 +73,9 @@ type Subscription struct {
 }
 
 type User struct {
-	ID        string             `json:"id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID          string             `json:"id"`
+	Email       string             `json:"email"`
+	Name        string             `json:"name"`
+	Coordinates pgtype.Point       `json:"coordinates"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }

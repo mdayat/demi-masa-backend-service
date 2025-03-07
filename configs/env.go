@@ -15,6 +15,7 @@ type Env struct {
 	TripayMerchantCode string
 	TripayAPIKey       string
 	TripayPrivateKey   string
+	GeoapifyAPIKey     string
 }
 
 func LoadEnv() (Env, error) {
@@ -31,6 +32,7 @@ func LoadEnv() (Env, error) {
 		TripayMerchantCode: os.Getenv("TRIPAY_MERCHANT_CODE"),
 		TripayAPIKey:       os.Getenv("TRIPAY_API_KEY"),
 		TripayPrivateKey:   os.Getenv("TRIPAY_PRIVATE_KEY"),
+		GeoapifyAPIKey:     os.Getenv("GEOAPIFY_API_KEY"),
 	}
 
 	return env, nil

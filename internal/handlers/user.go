@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
 	"github.com/mdayat/demi-masa/internal/retryutil"
@@ -19,6 +20,7 @@ type UserHandler interface {
 	GetMe(res http.ResponseWriter, req *http.Request)
 	GetActiveSubscription(res http.ResponseWriter, req *http.Request)
 	DeleteUser(res http.ResponseWriter, req *http.Request)
+	UpdateUserCoordinates(res http.ResponseWriter, req *http.Request)
 }
 
 type user struct {
@@ -139,4 +141,68 @@ func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
 	}
 
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully deleted user")
+}
+
+func (u user) UpdateUserCoordinates(res http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	logger := log.Ctx(ctx).With().Logger()
+
+	var reqBody struct {
+		Latitude  float64 `json:"latitude" validate:"required"`
+		Longitude float64 `json:"longitude" validate:"required"`
+	}
+
+	if err := httputil.DecodeAndValidate(req, u.configs.Validate, &reqBody); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	result, err := u.service.ReverseGeocode(ctx, reqBody.Latitude, reqBody.Longitude)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to reverse geocode")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	if result.City == "" || result.Timezone == "" {
+		logger.Error().Err(errors.New("empty reverse geocode result")).Caller().Int("status_code", http.StatusInternalServerError).Send()
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	userId := chi.URLParam(req, "userId")
+	err = retryutil.RetryWithoutData(func() error {
+		return u.configs.Db.Queries.UpdateUserCoordinatesById(ctx, repository.UpdateUserCoordinatesByIdParams{
+			ID:          userId,
+			Coordinates: pgtype.Point{P: pgtype.Vec2{X: reqBody.Longitude, Y: reqBody.Latitude}, Valid: true},
+		})
+	})
+
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update user coordinates")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	resBody := struct {
+		TimeZone string `json:"time_zone"`
+		City     string `json:"city"`
+	}{
+		TimeZone: result.Timezone,
+		City:     result.City,
+	}
+
+	params := httputil.SendSuccessResponseParams{
+		StatusCode: http.StatusOK,
+		ResBody:    resBody,
+	}
+
+	if err := httputil.SendSuccessResponse(res, params); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully updated user coordinates")
 }

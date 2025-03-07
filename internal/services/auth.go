@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"time"
@@ -18,14 +19,14 @@ import (
 )
 
 type AuthServicer interface {
-	ValidateIDToken(ctx context.Context, idToken string) (*idtoken.Payload, error)
+	ValidateIDToken(ctx context.Context, idToken string) (validateIDTokenResult, error)
 	CreateRefreshToken(claims RefreshTokenClaims) (string, error)
 	ValidateRefreshToken(tokenString string) (*RefreshTokenClaims, error)
 	CreateAccessToken(claims AccessTokenClaims) (string, error)
 	ValidateAccessToken(tokenString string) (*AccessTokenClaims, error)
 	RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) (rotateRefreshTokenResult, error)
-	RegisterUser(ctx context.Context, userId string) (RegisterUserResult, error)
-	AuthenticateUser(ctx context.Context, userId string) (AuthenticateUserResult, error)
+	RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error)
+	AuthenticateUser(ctx context.Context, userId string) (authenticateUserResult, error)
 }
 
 type auth struct {
@@ -38,13 +39,50 @@ func NewAuthService(configs configs.Configs) AuthServicer {
 	}
 }
 
-func (a auth) ValidateIDToken(ctx context.Context, idToken string) (*idtoken.Payload, error) {
+type validateIDTokenResult struct {
+	Subject string
+	Email   string
+	Name    string
+}
+
+func (a auth) ValidateIDToken(ctx context.Context, idToken string) (validateIDTokenResult, error) {
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
-		return nil, err
+		return validateIDTokenResult{}, err
 	}
 
-	return validator.Validate(ctx, idToken, a.configs.Env.ClientId)
+	payload, err := validator.Validate(ctx, idToken, a.configs.Env.ClientId)
+	if err != nil {
+		return validateIDTokenResult{}, fmt.Errorf("failed to validate Id token: %w", err)
+	}
+
+	emailRaw, exists := payload.Claims["email"]
+	if !exists {
+		return validateIDTokenResult{}, errors.New("email claim is missing")
+	}
+
+	email, ok := emailRaw.(string)
+	if !ok {
+		return validateIDTokenResult{}, errors.New("email claim is not a string")
+	}
+
+	nameRaw, exists := payload.Claims["name"]
+	if !exists {
+		return validateIDTokenResult{}, errors.New("name claim is missing")
+	}
+
+	name, ok := nameRaw.(string)
+	if !ok {
+		return validateIDTokenResult{}, errors.New("name claim is not a string")
+	}
+
+	validateIDTokenResult := validateIDTokenResult{
+		Subject: payload.Subject,
+		Email:   email,
+		Name:    name,
+	}
+
+	return validateIDTokenResult, nil
 }
 
 type TokenType int
@@ -267,23 +305,36 @@ func (a auth) createInsertPrayersParams(userId string) []repository.InsertPrayer
 	return insertPrayersParams
 }
 
-type RegisterUserResult struct {
+type RegisterUserParams struct {
+	UserId    string
+	UserEmail string
+	UserName  string
+}
+
+type registerUserResult struct {
 	User         repository.User
 	RefreshToken string
 	AccessToken  string
 }
 
-func (a auth) RegisterUser(ctx context.Context, userId string) (RegisterUserResult, error) {
-	retryableFunc := func(qtx *repository.Queries) (RegisterUserResult, error) {
-		user, err := qtx.InsertUser(ctx, userId)
+func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error) {
+	retryableFunc := func(qtx *repository.Queries) (registerUserResult, error) {
+		defaultCoordinates := pgtype.Vec2{X: 106.865036, Y: -6.175110} // the default coordinates is Jakarta
+		user, err := qtx.InsertUser(ctx, repository.InsertUserParams{
+			ID:          arg.UserId,
+			Email:       arg.UserEmail,
+			Name:        arg.UserName,
+			Coordinates: pgtype.Point{P: defaultCoordinates, Valid: true},
+		})
+
 		if err != nil {
-			return RegisterUserResult{}, fmt.Errorf("failed to insert user: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to insert user: %w", err)
 		}
 
-		insertPrayersParams := a.createInsertPrayersParams(userId)
+		insertPrayersParams := a.createInsertPrayersParams(arg.UserId)
 		_, err = qtx.InsertPrayers(ctx, insertPrayersParams)
 		if err != nil {
-			return RegisterUserResult{}, fmt.Errorf("failed to insert prayers: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to insert prayers: %w", err)
 		}
 
 		now := time.Now()
@@ -300,7 +351,7 @@ func (a auth) RegisterUser(ctx context.Context, userId string) (RegisterUserResu
 
 		refreshToken, err := a.CreateRefreshToken(refreshTokenClaims)
 		if err != nil {
-			return RegisterUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
 		}
 
 		accessTokenClaims := AccessTokenClaims{
@@ -315,12 +366,12 @@ func (a auth) RegisterUser(ctx context.Context, userId string) (RegisterUserResu
 
 		accessToken, err := a.CreateAccessToken(accessTokenClaims)
 		if err != nil {
-			return RegisterUserResult{}, fmt.Errorf("failed to create access token: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to create access token: %w", err)
 		}
 
 		refreshTokenUUID, err := uuid.Parse(refreshTokenClaims.ID)
 		if err != nil {
-			return RegisterUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
 		}
 
 		err = qtx.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
@@ -330,27 +381,27 @@ func (a auth) RegisterUser(ctx context.Context, userId string) (RegisterUserResu
 		})
 
 		if err != nil {
-			return RegisterUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
 		}
 
-		RegisterUserResult := RegisterUserResult{
+		registerUserResult := registerUserResult{
 			User:         user,
 			RefreshToken: refreshToken,
 			AccessToken:  accessToken,
 		}
 
-		return RegisterUserResult, nil
+		return registerUserResult, nil
 	}
 
 	return dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
 }
 
-type AuthenticateUserResult struct {
+type authenticateUserResult struct {
 	RefreshToken string
 	AccessToken  string
 }
 
-func (a auth) AuthenticateUser(ctx context.Context, userId string) (AuthenticateUserResult, error) {
+func (a auth) AuthenticateUser(ctx context.Context, userId string) (authenticateUserResult, error) {
 	now := time.Now()
 	refreshTokenClaims := RefreshTokenClaims{
 		Type: Refresh,
@@ -365,7 +416,7 @@ func (a auth) AuthenticateUser(ctx context.Context, userId string) (Authenticate
 
 	refreshToken, err := a.CreateRefreshToken(refreshTokenClaims)
 	if err != nil {
-		return AuthenticateUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to create refresh token: %w", err)
 	}
 
 	accessTokenClaims := AccessTokenClaims{
@@ -380,12 +431,12 @@ func (a auth) AuthenticateUser(ctx context.Context, userId string) (Authenticate
 
 	accessToken, err := a.CreateAccessToken(accessTokenClaims)
 	if err != nil {
-		return AuthenticateUserResult{}, fmt.Errorf("failed to create access token: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to create access token: %w", err)
 	}
 
 	refreshTokenUUID, err := uuid.Parse(refreshTokenClaims.ID)
 	if err != nil {
-		return AuthenticateUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
 	}
 
 	err = retryutil.RetryWithoutData(func() error {
@@ -397,13 +448,13 @@ func (a auth) AuthenticateUser(ctx context.Context, userId string) (Authenticate
 	})
 
 	if err != nil {
-		return AuthenticateUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
 	}
 
-	AuthenticateUserResult := AuthenticateUserResult{
+	authenticateUserResult := authenticateUserResult{
 		RefreshToken: refreshToken,
 		AccessToken:  accessToken,
 	}
 
-	return AuthenticateUserResult, nil
+	return authenticateUserResult, nil
 }

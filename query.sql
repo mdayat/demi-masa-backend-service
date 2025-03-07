@@ -1,11 +1,14 @@
 -- name: InsertUser :one
-INSERT INTO "user" (id) VALUES ($1) RETURNING *;
+INSERT INTO "user" (id, email, name, coordinates) VALUES ($1, $2, $3, $4) RETURNING *;
 
 -- name: SelectUserById :one
 SELECT * FROM "user" WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SelectUserByInvoiceID :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;
+
+-- name: UpdateUserCoordinatesById :exec
+UPDATE "user" SET coordinates = $2 WHERE id = $1;
 
 -- name: DeleteUserByID :exec
 DELETE FROM "user" WHERE id = $1;

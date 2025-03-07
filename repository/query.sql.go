@@ -156,13 +156,31 @@ func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscription
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO "user" (id) VALUES ($1) RETURNING id, created_at
+INSERT INTO "user" (id, email, name, coordinates) VALUES ($1, $2, $3, $4) RETURNING id, email, name, coordinates, created_at
 `
 
-func (q *Queries) InsertUser(ctx context.Context, id string) (User, error) {
-	row := q.db.QueryRow(ctx, insertUser, id)
+type InsertUserParams struct {
+	ID          string       `json:"id"`
+	Email       string       `json:"email"`
+	Name        string       `json:"name"`
+	Coordinates pgtype.Point `json:"coordinates"`
+}
+
+func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, insertUser,
+		arg.ID,
+		arg.Email,
+		arg.Name,
+		arg.Coordinates,
+	)
 	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Coordinates,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
@@ -309,24 +327,36 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 }
 
 const selectUserById = `-- name: SelectUserById :one
-SELECT id, created_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, name, coordinates, created_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, selectUserById, id)
 	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Coordinates,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
 const selectUserByInvoiceID = `-- name: SelectUserByInvoiceID :one
-SELECT u.id, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
+SELECT u.id, u.email, u.name, u.coordinates, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
 `
 
 func (q *Queries) SelectUserByInvoiceID(ctx context.Context, id pgtype.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, selectUserByInvoiceID, id)
 	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Coordinates,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
@@ -341,5 +371,19 @@ type UpdatePrayerStatusParams struct {
 
 func (q *Queries) UpdatePrayerStatus(ctx context.Context, arg UpdatePrayerStatusParams) error {
 	_, err := q.db.Exec(ctx, updatePrayerStatus, arg.ID, arg.Status)
+	return err
+}
+
+const updateUserCoordinatesById = `-- name: UpdateUserCoordinatesById :exec
+UPDATE "user" SET coordinates = $2 WHERE id = $1
+`
+
+type UpdateUserCoordinatesByIdParams struct {
+	ID          string       `json:"id"`
+	Coordinates pgtype.Point `json:"coordinates"`
+}
+
+func (q *Queries) UpdateUserCoordinatesById(ctx context.Context, arg UpdateUserCoordinatesByIdParams) error {
+	_, err := q.db.Exec(ctx, updateUserCoordinatesById, arg.ID, arg.Coordinates)
 	return err
 }

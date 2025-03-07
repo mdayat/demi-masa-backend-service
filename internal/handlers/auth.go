@@ -59,7 +59,12 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := a.service.RegisterUser(ctx, payload.Subject)
+	result, err := a.service.RegisterUser(ctx, services.RegisterUserParams{
+		UserId:    payload.Subject,
+		UserEmail: payload.Email,
+		UserName:  payload.Name,
+	})
+
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
