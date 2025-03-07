@@ -3,9 +3,12 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"time"
+
+	"github.com/goccy/go-json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -14,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
+	"github.com/mdayat/demi-masa/internal/retryutil"
 	"github.com/mdayat/demi-masa/internal/services"
 	"github.com/mdayat/demi-masa/repository"
 	"github.com/rs/zerolog/log"
@@ -22,6 +26,7 @@ import (
 type PaymentHandler interface {
 	GetActiveInvoice(res http.ResponseWriter, req *http.Request)
 	CreateInvoice(res http.ResponseWriter, req *http.Request)
+	TripayCallback(res http.ResponseWriter, req *http.Request)
 }
 
 type payment struct {
@@ -41,7 +46,6 @@ type invoiceResponse struct {
 	RefId       string `json:"ref_id"`
 	CouponCode  string `json:"coupon_code"`
 	TotalAmount int32  `json:"total_amount"`
-	Status      string `json:"status"`
 	QrUrl       string `json:"qr_url"`
 	ExpiresAt   string `json:"expires_at"`
 	CreatedAt   string `json:"created_at"`
@@ -66,7 +70,6 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 			RefId:       invoice.RefID,
 			CouponCode:  invoice.CouponCode.String,
 			TotalAmount: invoice.TotalAmount,
-			Status:      invoice.Status,
 			QrUrl:       invoice.QrUrl,
 			ExpiresAt:   invoice.ExpiresAt.Time.Format(time.RFC3339),
 			CreatedAt:   invoice.CreatedAt.Time.Format(time.RFC3339),
@@ -149,6 +152,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 		CustomerName:  reqBody.CustomerName,
 		CustomerEmail: reqBody.CustomerEmail,
 		TotalAmount:   totalAmount,
+		PlanId:        reqBody.Plan.Id,
 		PlanName:      reqBody.Plan.Name,
 		PlanPrice:     reqBody.Plan.Price,
 	})
@@ -167,16 +171,25 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 	userId := ctx.Value(userIdKey{}).(string)
 	expiresAt := time.Unix(int64(tripayTxResponse.ExpiredTime), 0)
 
-	invoice, err := p.service.InsertInvoice(ctx, repository.InsertInvoiceParams{
-		ID:          pgtype.UUID{Bytes: merchantRef, Valid: true},
-		UserID:      userId,
-		RefID:       tripayTxResponse.Reference,
-		CouponCode:  couponCode,
-		TotalAmount: int32(tripayTxResponse.Amount),
-		QrUrl:       tripayTxResponse.QrURL,
-		ExpiresAt:   pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
+	retryableFunc := func() (repository.Invoice, error) {
+		planUUID, err := uuid.Parse(reqBody.Plan.Id)
+		if err != nil {
+			return repository.Invoice{}, fmt.Errorf("failed to parse plan Id to UUID: %w", err)
+		}
 
+		return p.configs.Db.Queries.InsertInvoice(ctx, repository.InsertInvoiceParams{
+			ID:          pgtype.UUID{Bytes: merchantRef, Valid: true},
+			UserID:      userId,
+			PlanID:      pgtype.UUID{Bytes: planUUID, Valid: true},
+			RefID:       tripayTxResponse.Reference,
+			CouponCode:  couponCode,
+			TotalAmount: int32(tripayTxResponse.Amount),
+			QrUrl:       tripayTxResponse.QrURL,
+			ExpiresAt:   pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		})
+	}
+
+	invoice, err := retryutil.RetryWithData(retryableFunc)
 	if err != nil {
 		if couponCode.Valid {
 			shouldRollbackCoupon = true
@@ -198,7 +211,6 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 		RefId:       invoice.RefID,
 		CouponCode:  invoice.CouponCode.String,
 		TotalAmount: invoice.TotalAmount,
-		Status:      invoice.Status,
 		QrUrl:       invoice.QrUrl,
 		ExpiresAt:   invoice.ExpiresAt.Time.Format(time.RFC3339),
 		CreatedAt:   invoice.CreatedAt.Time.Format(time.RFC3339),
@@ -217,4 +229,99 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 	}
 
 	logger.Info().Int("status_code", http.StatusCreated).Msg("successfully created invoice")
+}
+
+func (p payment) TripayCallback(res http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	logger := log.Ctx(ctx).With().Logger()
+
+	bytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to read tripay callback request")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	tripaySignature := req.Header.Get("X-Callback-Signature")
+	err = p.service.ValidateCallbackSignature(tripaySignature, bytes)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusForbidden).Send()
+		http.Error(res, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
+
+	var body struct {
+		Reference   string `json:"reference"`
+		MerchantRef string `json:"merchant_ref"`
+		TotalAmount int    `json:"total_amount"`
+		Status      string `json:"status"`
+	}
+
+	if err := json.Unmarshal(bytes, &body); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to unmarshal tripay callback request")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	user, err := retryutil.RetryWithData(func() (repository.User, error) {
+		invoiceUUID, err := uuid.Parse(body.MerchantRef)
+		if err != nil {
+			return repository.User{}, fmt.Errorf("failed to parse invoice Id to UUID: %w", err)
+		}
+
+		return p.configs.Db.Queries.SelectUserByInvoiceID(ctx, pgtype.UUID{Bytes: invoiceUUID, Valid: true})
+	})
+
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user by invoice Id")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	if body.Status == "PAID" {
+		err = p.service.ProcessSuccessfulPayment(ctx, services.ProcessSuccessfulPaymentParams{
+			InvoiceId:  body.MerchantRef,
+			UserId:     user.ID,
+			AmountPaid: int32(body.TotalAmount),
+			Status:     body.Status,
+		})
+
+		if err != nil {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to process successful payment")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		err = p.service.ProcessUnsuccessfulPayment(ctx, services.ProcessUnsuccessfulPaymentParams{
+			InvoiceId:  body.MerchantRef,
+			UserId:     user.ID,
+			AmountPaid: int32(body.TotalAmount),
+			Status:     body.Status,
+		})
+
+		if err != nil {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to process unsuccessful payment")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	resBody := struct {
+		Status bool `json:"status"`
+	}{
+		Status: true,
+	}
+
+	params := httputil.SendSuccessResponseParams{
+		StatusCode: http.StatusOK,
+		ResBody:    resBody,
+	}
+
+	if err := httputil.SendSuccessResponse(res, params); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully processed tripay callback request")
 }

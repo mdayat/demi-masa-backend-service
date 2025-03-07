@@ -57,6 +57,10 @@ func (r rest) Start() error {
 	r.router.Post("/auth/login", authHandler.Login)
 	r.router.Post("/auth/refresh", authHandler.Refresh)
 
+	paymentService := services.NewPaymentService(r.configs)
+	paymentHandler := handlers.NewPaymentHandler(r.configs, paymentService)
+	r.router.Post("/payments/callback", paymentHandler.TripayCallback)
+
 	r.router.Group(func(router chi.Router) {
 		router.Use(customMiddleware.Authenticate)
 
@@ -70,8 +74,6 @@ func (r rest) Start() error {
 		router.Get("/prayers", prayerHandler.GetPrayers)
 		router.Put("/prayers/{prayerId}", prayerHandler.UpdatePrayerStatus)
 
-		paymentService := services.NewPaymentService(r.configs)
-		paymentHandler := handlers.NewPaymentHandler(r.configs, paymentService)
 		router.Get("/invoices/active", paymentHandler.GetActiveInvoice)
 		router.Post("/invoices", paymentHandler.CreateInvoice)
 	})
