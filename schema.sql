@@ -47,6 +47,15 @@ CREATE TABLE coupon (
   deleted_at TIMESTAMPTZ NULL
 );
 
+CREATE TABLE plan (
+  id UUID PRIMARY KEY,
+  name VARCHAR(100) UNIQUE NOT NULL,
+  price INT NOT NULL,
+  duration_in_months SMALLINT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  deleted_at TIMESTAMPTZ NULL
+);
+
 CREATE TABLE invoice (
   id UUID PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
@@ -72,14 +81,10 @@ CREATE TABLE invoice (
 
   CONSTRAINT fk_invoice_coupon_code
     FOREIGN KEY (coupon_code)
-    REFERENCES coupon(coupon_code)
+    REFERENCES coupon(code)
     ON UPDATE CASCADE
     ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX unique_invoice_user_id_active
-  ON invoice(user_id)
-  WHERE expires_at > NOW();
 
 CREATE TABLE payment (
   id UUID PRIMARY KEY,
@@ -100,15 +105,6 @@ CREATE TABLE payment (
     REFERENCES invoice(id)
     ON UPDATE CASCADE
     ON DELETE CASCADE
-);
-
-CREATE TABLE plan (
-  id UUID PRIMARY KEY,
-  name VARCHAR(100) UNIQUE NOT NULL,
-  price INT NOT NULL,
-  duration_in_months SMALLINT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  deleted_at TIMESTAMPTZ NULL
 );
 
 CREATE TABLE subscription (
@@ -137,7 +133,3 @@ CREATE TABLE subscription (
     ON UPDATE CASCADE
     ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX unique_subscription_user_id_active
-  ON subscription(user_id)
-  WHERE end_date > NOW();

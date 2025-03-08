@@ -11,9 +11,7 @@ import (
 	"github.com/goccy/go-json"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa/configs"
 	"github.com/mdayat/demi-masa/internal/httputil"
@@ -205,14 +203,8 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 			shouldRollbackCoupon = true
 		}
 
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			logger.Error().Err(err).Caller().Int("status_code", http.StatusConflict).Msg("active invoice already exist")
-			http.Error(res, http.StatusText(http.StatusConflict), http.StatusConflict)
-		} else {
-			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to insert invoice")
-			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to insert invoice")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
