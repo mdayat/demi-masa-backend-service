@@ -99,14 +99,15 @@ type RefreshTokenClaims struct {
 
 func (a auth) CreateRefreshToken(claims RefreshTokenClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(a.configs.Env.SecretKey)
+	return token.SignedString([]byte(a.configs.Env.SecretKey))
 }
 
 func (a auth) ValidateRefreshToken(tokenString string) (*RefreshTokenClaims, error) {
-	token, err := jwt.Parse(
+	token, err := jwt.ParseWithClaims(
 		tokenString,
+		&RefreshTokenClaims{},
 		func(_ *jwt.Token) (interface{}, error) {
-			return a.configs.Env.SecretKey, nil
+			return []byte(a.configs.Env.SecretKey), nil
 		},
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
 		jwt.WithIssuer(a.configs.Env.OriginURL),
@@ -114,17 +115,21 @@ func (a auth) ValidateRefreshToken(tokenString string) (*RefreshTokenClaims, err
 		jwt.WithExpirationRequired(),
 	)
 
-	if err != nil || !token.Valid {
+	if err != nil {
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
+	}
+
+	if !token.Valid {
+		return nil, errors.New("invalid refresh token")
 	}
 
 	claims, ok := token.Claims.(*RefreshTokenClaims)
 	if !ok {
-		return nil, fmt.Errorf("invalid refresh token claims: %w", err)
+		return nil, errors.New("invalid refresh token claims")
 	}
 
 	if claims.Type != Refresh {
-		return nil, fmt.Errorf("invalid refresh token type: %w", err)
+		return nil, errors.New("invalid refresh token type")
 	}
 
 	return claims, nil
@@ -137,14 +142,15 @@ type AccessTokenClaims struct {
 
 func (a auth) CreateAccessToken(claims AccessTokenClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(a.configs.Env.SecretKey)
+	return token.SignedString([]byte(a.configs.Env.SecretKey))
 }
 
 func (a auth) ValidateAccessToken(tokenString string) (*AccessTokenClaims, error) {
-	token, err := jwt.Parse(
+	token, err := jwt.ParseWithClaims(
 		tokenString,
+		&AccessTokenClaims{},
 		func(_ *jwt.Token) (interface{}, error) {
-			return a.configs.Env.SecretKey, nil
+			return []byte(a.configs.Env.SecretKey), nil
 		},
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
 		jwt.WithIssuer(a.configs.Env.OriginURL),
@@ -152,17 +158,21 @@ func (a auth) ValidateAccessToken(tokenString string) (*AccessTokenClaims, error
 		jwt.WithExpirationRequired(),
 	)
 
-	if err != nil || !token.Valid {
+	if err != nil {
 		return nil, fmt.Errorf("invalid access token: %w", err)
+	}
+
+	if !token.Valid {
+		return nil, errors.New("invalid access token")
 	}
 
 	claims, ok := token.Claims.(*AccessTokenClaims)
 	if !ok {
-		return nil, fmt.Errorf("invalid access token claims: %w", err)
+		return nil, errors.New("invalid access token claims")
 	}
 
 	if claims.Type != Access {
-		return nil, fmt.Errorf("invalid access token type: %w", err)
+		return nil, errors.New("invalid access token type")
 	}
 
 	return claims, nil

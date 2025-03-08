@@ -364,7 +364,7 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 }
 
 const selectUserById = `-- name: SelectUserById :one
-SELECT id, email, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1
 `
 
 func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {

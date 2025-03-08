@@ -58,7 +58,8 @@ func (m middleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		claims, err := m.authService.ValidateAccessToken(bearerToken)
+		accessToken := strings.Split(bearerToken, "Bearer ")[1]
+		claims, err := m.authService.ValidateAccessToken(accessToken)
 		if err != nil {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid access token")
 			http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)

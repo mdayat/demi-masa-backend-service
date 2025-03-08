@@ -62,7 +62,7 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 	}
 
 	resBody := struct {
-		Id        string  `json:"user_id"`
+		Id        string  `json:"id"`
 		Email     string  `json:"email"`
 		Name      string  `json:"name"`
 		Latitude  float64 `json:"latitude"`

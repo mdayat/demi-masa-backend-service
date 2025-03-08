@@ -2,7 +2,7 @@
 INSERT INTO "user" (id, email, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 
 -- name: SelectUserById :one
-SELECT * FROM "user" WHERE id = $1 AND deleted_at IS NULL;
+SELECT * FROM "user" WHERE id = $1;
 
 -- name: SelectUserByInvoiceID :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;

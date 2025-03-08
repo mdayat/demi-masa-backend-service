@@ -39,7 +39,7 @@ func NewAuthHandler(configs configs.Configs, service services.AuthServicer) Auth
 }
 
 type userResponse struct {
-	Id        string  `json:"user_id"`
+	Id        string  `json:"id"`
 	Email     string  `json:"email"`
 	Name      string  `json:"name"`
 	Latitude  float64 `json:"latitude"`
@@ -209,7 +209,7 @@ func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	claims, err := a.service.ValidateRefreshToken(bearerToken)
+	claims, err := a.service.ValidateRefreshToken(strings.Split(bearerToken, "Bearer ")[1])
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid refresh token")
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
