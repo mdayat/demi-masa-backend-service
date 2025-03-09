@@ -23,6 +23,7 @@ import (
 type AuthHandler interface {
 	Register(res http.ResponseWriter, req *http.Request)
 	Login(res http.ResponseWriter, req *http.Request)
+	Logout(res http.ResponseWriter, req *http.Request)
 	Refresh(res http.ResponseWriter, req *http.Request)
 }
 
@@ -196,6 +197,56 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 	}
 
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully authenticated user")
+}
+
+func (a auth) Logout(res http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	logger := log.Ctx(ctx).With().Logger()
+
+	var reqBody struct {
+		UserId string `json:"user_id" validate:"required"`
+	}
+
+	if err := httputil.DecodeAndValidate(req, a.configs.Validate, &reqBody); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	bearerToken := req.Header.Get("Authorization")
+	if bearerToken == "" || !strings.Contains(bearerToken, "Bearer") {
+		logger.Error().Err(errors.New("invalid authorization header")).Caller().Int("status_code", http.StatusUnauthorized).Send()
+		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	refreshToken := strings.Split(bearerToken, "Bearer ")[1]
+	claims, err := a.service.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid refresh token")
+		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	err = retryutil.RetryWithoutData(func() error {
+		refreshTokenUUID, err := uuid.Parse(claims.ID)
+		if err != nil {
+			return fmt.Errorf("failed to parse JTI to UUID: %w", err)
+		}
+
+		return a.configs.Db.Queries.RevokeRefreshToken(ctx, repository.RevokeRefreshTokenParams{
+			ID:     pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
+			UserID: reqBody.UserId,
+		})
+	})
+
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to revoke refresh token")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully revoked refresh token")
 }
 
 func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {

@@ -335,7 +335,7 @@ func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registe
 			Name:        arg.UserName,
 			Coordinates: pgtype.Point{P: pgtype.Vec2{X: 106.865036, Y: -6.175110}, Valid: true},
 			City:        "Jakarta",
-			Timezone:    "WIB",
+			Timezone:    "Asia/Jakarta",
 		})
 
 		if err != nil {

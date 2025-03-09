@@ -55,6 +55,7 @@ func (r rest) Start() error {
 	authHandler := handlers.NewAuthHandler(r.configs, authService)
 	r.router.Post("/auth/register", authHandler.Register)
 	r.router.Post("/auth/login", authHandler.Login)
+	r.router.Post("/auth/logout", authHandler.Logout)
 	r.router.Get("/auth/refresh", authHandler.Refresh)
 
 	paymentService := services.NewPaymentService(r.configs)
