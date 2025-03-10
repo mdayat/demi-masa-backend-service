@@ -193,7 +193,7 @@ func (p payment) ProcessSuccessfulPayment(ctx context.Context, arg ProcessSucces
 			UserID:     arg.UserId,
 			InvoiceID:  pgtype.UUID{Bytes: invoiceUUID, Valid: true},
 			AmountPaid: arg.AmountPaid,
-			Status:     arg.Status,
+			Status:     strings.ToLower(arg.Status),
 		})
 
 		if err != nil {
