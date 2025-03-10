@@ -9,10 +9,9 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
-	"github.com/mdayat/demi-masa/configs"
-
-	"github.com/mdayat/demi-masa/internal/handlers"
-	"github.com/mdayat/demi-masa/internal/services"
+	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/handlers"
+	"github.com/mdayat/demi-masa-backend-service/internal/services"
 )
 
 type RestServicer interface {

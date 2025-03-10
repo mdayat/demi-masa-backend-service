@@ -5,9 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/mdayat/demi-masa/configs"
-	"github.com/mdayat/demi-masa/internal"
-
+	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )

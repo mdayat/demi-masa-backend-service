@@ -8,10 +8,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/mdayat/demi-masa/configs"
-	"github.com/mdayat/demi-masa/internal/httputil"
-	"github.com/mdayat/demi-masa/internal/retryutil"
-	"github.com/mdayat/demi-masa/repository"
+	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/httputil"
+	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
+	"github.com/mdayat/demi-masa-backend-service/repository"
 	"github.com/rs/zerolog/log"
 )
 

@@ -17,10 +17,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/avast/retry-go/v4"
-	"github.com/mdayat/demi-masa/configs"
-	"github.com/mdayat/demi-masa/internal/dbutil"
-	"github.com/mdayat/demi-masa/internal/retryutil"
-	"github.com/mdayat/demi-masa/repository"
+	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/dbutil"
+	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
+	"github.com/mdayat/demi-masa-backend-service/repository"
 )
 
 type PaymentServicer interface {

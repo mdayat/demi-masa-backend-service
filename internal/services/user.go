@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/goccy/go-json"
-	"github.com/mdayat/demi-masa/configs"
-	"github.com/mdayat/demi-masa/internal/retryutil"
+	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 )
 
 type UserServicer interface {

@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/mdayat/demi-masa/configs"
-	"github.com/mdayat/demi-masa/internal/services"
+	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/services"
 	"github.com/rs/zerolog/log"
 )
 

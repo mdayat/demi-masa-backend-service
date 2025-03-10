@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mdayat/demi-masa/internal/retryutil"
-	"github.com/mdayat/demi-masa/repository"
+	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
+	"github.com/mdayat/demi-masa-backend-service/repository"
 )
 
 func RetryableTxWithData[T any](

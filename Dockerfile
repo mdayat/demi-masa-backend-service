@@ -7,8 +7,11 @@ WORKDIR /app
 
 FROM base-go AS build
 COPY go.mod go.sum ./
-RUN go mod download
 COPY main.go .
+COPY configs/ ./configs/
+COPY internal/ ./internal/
+COPY repository/ ./repository/
+RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o app
 
 FROM base-alpine AS final

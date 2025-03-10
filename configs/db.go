@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mdayat/demi-masa/repository"
+	"github.com/mdayat/demi-masa-backend-service/repository"
 )
 
 type Db struct {

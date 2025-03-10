@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/mdayat/demi-masa/configs"
+	"github.com/mdayat/demi-masa-backend-service/configs"
 )
 
 type PrayerServicer interface {
