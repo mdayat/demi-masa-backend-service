@@ -25,6 +25,7 @@ type PaymentHandler interface {
 	GetActiveInvoice(res http.ResponseWriter, req *http.Request)
 	CreateInvoice(res http.ResponseWriter, req *http.Request)
 	TripayCallback(res http.ResponseWriter, req *http.Request)
+	GetPayments(res http.ResponseWriter, req *http.Request)
 }
 
 type payment struct {
@@ -41,6 +42,7 @@ func NewPaymentHandler(configs configs.Configs, service services.PaymentServicer
 
 type invoiceResponse struct {
 	Id          string `json:"id"`
+	PlanId      string `json:"plan_id"`
 	RefId       string `json:"ref_id"`
 	CouponCode  string `json:"coupon_code"`
 	TotalAmount int32  `json:"total_amount"`
@@ -68,6 +70,7 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 	if err == nil {
 		resBody := invoiceResponse{
 			Id:          invoice.ID.String(),
+			PlanId:      invoice.PlanID.String(),
 			RefId:       invoice.RefID,
 			CouponCode:  invoice.CouponCode.String,
 			TotalAmount: invoice.TotalAmount,
@@ -89,7 +92,7 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 }
 
 type createInvoiceRequest struct {
-	CouponCode    string `json:"coupon_code" validate:"required"`
+	CouponCode    string `json:"coupon_code"`
 	CustomerName  string `json:"customer_name" validate:"required"`
 	CustomerEmail string `json:"customer_email" validate:"required,email"`
 	Plan          struct {
@@ -97,7 +100,7 @@ type createInvoiceRequest struct {
 		Name             string `json:"name" validate:"required"`
 		Price            int    `json:"price" validate:"required"`
 		DurationInMonths int    `json:"duration_in_months" validate:"required"`
-	}
+	} `json:"plan"`
 }
 
 func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
@@ -162,7 +165,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 		TotalAmount:   totalAmount,
 		PlanId:        reqBody.Plan.Id,
 		PlanName:      reqBody.Plan.Name,
-		PlanPrice:     reqBody.Plan.Price,
+		PlanPrice:     totalAmount,
 	})
 
 	tripayTxResponse, err := p.service.RequestTripayTx(ctx, tripayTxRequest)
@@ -210,6 +213,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 
 	resBody := invoiceResponse{
 		Id:          merchantRefString,
+		PlanId:      invoice.PlanID.String(),
 		RefId:       invoice.RefID,
 		CouponCode:  invoice.CouponCode.String,
 		TotalAmount: invoice.TotalAmount,
@@ -326,4 +330,52 @@ func (p payment) TripayCallback(res http.ResponseWriter, req *http.Request) {
 	}
 
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully processed tripay callback request")
+}
+
+type getPaymentsResponse struct {
+	Id         string `json:"id"`
+	InvoiceId  string `json:"invoice_id"`
+	AmountPaid int32  `json:"amount_paid"`
+	Status     string `json:"status"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func (p payment) GetPayments(res http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	logger := log.Ctx(ctx).With().Logger()
+
+	userId := ctx.Value(userIdKey{}).(string)
+	payments, err := retryutil.RetryWithData(func() ([]repository.Payment, error) {
+		return p.configs.Db.Queries.SelectPayments(ctx, userId)
+	})
+
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select payments")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	resBody := make([]getPaymentsResponse, 0, len(payments))
+	for _, payment := range payments {
+		resBody = append(resBody, getPaymentsResponse{
+			Id:         payment.ID.String(),
+			InvoiceId:  payment.InvoiceID.String(),
+			AmountPaid: payment.AmountPaid,
+			Status:     payment.Status,
+			CreatedAt:  payment.CreatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
+	params := httputil.SendSuccessResponseParams{
+		StatusCode: http.StatusOK,
+		ResBody:    resBody,
+	}
+
+	if err := httputil.SendSuccessResponse(res, params); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got payments")
 }

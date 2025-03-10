@@ -60,8 +60,14 @@ UPDATE coupon SET quota = quota + 1 WHERE code = $1;
 -- name: InsertPayment :exec
 INSERT INTO payment (id, user_id, invoice_id, amount_paid, status) VALUES ($1, $2, $3, $4, $5);
 
+-- name: SelectPayments :many
+SELECT * FROM payment WHERE user_id = $1;
+
 -- name: SelectPlanByInvoiceId :one
 SELECT p.* FROM invoice i JOIN plan p ON i.plan_id = p.id WHERE i.id = $1;
 
 -- name: SelectPlans :many
 SELECT * FROM plan WHERE deleted_at IS NULL;
+
+-- name: SelectPlanById :one
+SELECT * FROM plan WHERE id = $1 AND deleted_at IS NULL;

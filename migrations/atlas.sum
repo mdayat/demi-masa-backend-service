@@ -1,3 +1,4 @@
-h1:cVKQgVi2OAZqksWgxG+naPsNJ7oP8iY/3zdAecUqUqg=
+h1:MRuSqHx0ebzY1LKCHKovSF4EFlO+R2YfWXaNnncZlvY=
 20250308003702_initial_schema.sql h1:9U9TqUbn7sduDE8n0ay0mzt/B9J+NSkpBTZzOnd8lgY=
 20250309003000_change_timezone_type.sql h1:4a3T0URnNb2dID/It2CyCDmL12htvff2ErPGbgN6lHQ=
+20250309224402_change_unique_on_plan_table.sql h1:hjvyC1eKWqsOj34SQFLiEndJGF+dr1jZjiSntBt6nlk=

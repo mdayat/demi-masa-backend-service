@@ -79,9 +79,11 @@ func (r rest) Start() error {
 
 		router.Get("/invoices/active", paymentHandler.GetActiveInvoice)
 		router.Post("/invoices", paymentHandler.CreateInvoice)
+		router.Get("/payments", paymentHandler.GetPayments)
 
 		planHandler := handlers.NewPlanHandler(r.configs)
 		router.Get("/plans", planHandler.GetPlans)
+		router.Get("/plans/{planId}", planHandler.GetPlan)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {

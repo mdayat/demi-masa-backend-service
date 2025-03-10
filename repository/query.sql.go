@@ -249,6 +249,55 @@ func (q *Queries) SelectActiveSubscription(ctx context.Context, userID string) (
 	return i, err
 }
 
+const selectPayments = `-- name: SelectPayments :many
+SELECT id, user_id, invoice_id, amount_paid, status, created_at FROM payment WHERE user_id = $1
+`
+
+func (q *Queries) SelectPayments(ctx context.Context, userID string) ([]Payment, error) {
+	rows, err := q.db.Query(ctx, selectPayments, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Payment
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.InvoiceID,
+			&i.AmountPaid,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const selectPlanById = `-- name: SelectPlanById :one
+SELECT id, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) SelectPlanById(ctx context.Context, id pgtype.UUID) (Plan, error) {
+	row := q.db.QueryRow(ctx, selectPlanById, id)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Price,
+		&i.DurationInMonths,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const selectPlanByInvoiceId = `-- name: SelectPlanByInvoiceId :one
 SELECT p.id, p.name, p.price, p.duration_in_months, p.created_at, p.deleted_at FROM invoice i JOIN plan p ON i.plan_id = p.id WHERE i.id = $1
 `

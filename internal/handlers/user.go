@@ -114,10 +114,14 @@ func (u user) GetActiveSubscription(res http.ResponseWriter, req *http.Request) 
 	if err == nil {
 		resBody := struct {
 			Id        string `json:"id"`
+			PlanId    string `json:"plan_id"`
+			PaymentId string `json:"payment_id"`
 			StartDate string `json:"start_date"`
 			EndDate   string `json:"end_date"`
 		}{
 			Id:        subscription.ID.String(),
+			PlanId:    subscription.PlanID.String(),
+			PaymentId: subscription.PaymentID.String(),
 			StartDate: subscription.StartDate.Time.Format(time.RFC3339),
 			EndDate:   subscription.EndDate.Time.Format(time.RFC3339),
 		}
