@@ -55,7 +55,9 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	logger := log.Ctx(ctx).With().Logger()
 
 	var reqBody struct {
-		IdToken string `json:"id_token" validate:"required,jwt"`
+		Username string `json:"username" validate:"required"`
+		Email    string `json:"email" validate:"required,email"`
+		Password string `json:"password" validate:"required"`
 	}
 
 	if err := httputil.DecodeAndValidate(req, a.configs.Validate, &reqBody); err != nil {
@@ -64,17 +66,12 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	payload, err := a.service.ValidateIDToken(ctx, reqBody.IdToken)
-	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid Id token")
-		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-
+	userUUID := uuid.New()
 	result, err := a.service.RegisterUser(ctx, services.RegisterUserParams{
-		UserId:    payload.Subject,
-		UserEmail: payload.Email,
-		UserName:  payload.Name,
+		UserUUID:  pgtype.UUID{Bytes: userUUID, Valid: true},
+		Username:  reqBody.Username,
+		UserEmail: reqBody.Email,
+		Password:  reqBody.Password,
 	})
 
 	if err != nil {
@@ -97,7 +94,7 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
 		User: userResponse{
-			Id:        result.User.ID,
+			Id:        result.User.ID.String(),
 			Email:     result.User.Email,
 			Name:      result.User.Name,
 			Latitude:  result.User.Coordinates.P.Y,
@@ -128,7 +125,8 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 	logger := log.Ctx(ctx).With().Logger()
 
 	var reqBody struct {
-		IdToken string `json:"id_token" validate:"required,jwt"`
+		Email    string `json:"email" validate:"required,email"`
+		Password string `json:"password" validate:"required"`
 	}
 
 	if err := httputil.DecodeAndValidate(req, a.configs.Validate, &reqBody); err != nil {
@@ -137,15 +135,11 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	payload, err := a.service.ValidateIDToken(ctx, reqBody.IdToken)
-	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid Id token")
-		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-
 	user, err := retryutil.RetryWithData(func() (repository.User, error) {
-		return a.configs.Db.Queries.SelectUserById(ctx, payload.Subject)
+		return a.configs.Db.Queries.SelectUserByEmailAndPassword(ctx, repository.SelectUserByEmailAndPasswordParams{
+			Email:    reqBody.Email,
+			Password: reqBody.Password,
+		})
 	})
 
 	if err != nil {
@@ -174,7 +168,7 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
 		User: userResponse{
-			Id:        user.ID,
+			Id:        user.ID.String(),
 			Email:     user.Email,
 			Name:      user.Name,
 			Latitude:  user.Coordinates.P.Y,
@@ -234,9 +228,14 @@ func (a auth) Logout(res http.ResponseWriter, req *http.Request) {
 			return fmt.Errorf("failed to parse JTI to UUID: %w", err)
 		}
 
+		userUUID, err := uuid.Parse(reqBody.UserId)
+		if err != nil {
+			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
 		return a.configs.Db.Queries.RevokeRefreshToken(ctx, repository.RevokeRefreshTokenParams{
 			ID:     pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
-			UserID: reqBody.UserId,
+			UserID: pgtype.UUID{Bytes: userUUID, Valid: true},
 		})
 	})
 
@@ -273,9 +272,14 @@ func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
 			return repository.RefreshToken{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
 		}
 
+		userUUID, err := uuid.Parse(claims.Subject)
+		if err != nil {
+			return repository.RefreshToken{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
 		return a.configs.Db.Queries.SelectRefreshTokenById(ctx, repository.SelectRefreshTokenByIdParams{
 			ID:     pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
-			UserID: claims.Subject,
+			UserID: pgtype.UUID{Bytes: userUUID, Valid: true},
 		})
 	})
 
@@ -293,7 +297,7 @@ func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
 
 	result, err := a.service.RotateRefreshToken(ctx, services.RotateRefreshTokenParams{
 		Jti:       refreshToken.ID.String(),
-		UserId:    refreshToken.UserID,
+		UserUUID:  refreshToken.UserID,
 		ExpiresAt: refreshToken.ExpiresAt.Time,
 	})
 

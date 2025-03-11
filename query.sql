@@ -1,8 +1,11 @@
 -- name: InsertUser :one
-INSERT INTO "user" (id, email, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
+INSERT INTO "user" (id, email, password, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
 
 -- name: SelectUserById :one
 SELECT * FROM "user" WHERE id = $1;
+
+-- name: SelectUserByEmailAndPassword :one
+SELECT * FROM "user" WHERE email = $1 AND password = $2;
 
 -- name: SelectUserByInvoiceID :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;

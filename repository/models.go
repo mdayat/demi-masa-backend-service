@@ -18,7 +18,7 @@ type Coupon struct {
 
 type Invoice struct {
 	ID          pgtype.UUID        `json:"id"`
-	UserID      string             `json:"user_id"`
+	UserID      pgtype.UUID        `json:"user_id"`
 	PlanID      pgtype.UUID        `json:"plan_id"`
 	RefID       string             `json:"ref_id"`
 	CouponCode  pgtype.Text        `json:"coupon_code"`
@@ -30,7 +30,7 @@ type Invoice struct {
 
 type Payment struct {
 	ID         pgtype.UUID        `json:"id"`
-	UserID     string             `json:"user_id"`
+	UserID     pgtype.UUID        `json:"user_id"`
 	InvoiceID  pgtype.UUID        `json:"invoice_id"`
 	AmountPaid int32              `json:"amount_paid"`
 	Status     string             `json:"status"`
@@ -48,7 +48,7 @@ type Plan struct {
 
 type Prayer struct {
 	ID     pgtype.UUID `json:"id"`
-	UserID string      `json:"user_id"`
+	UserID pgtype.UUID `json:"user_id"`
 	Name   string      `json:"name"`
 	Status string      `json:"status"`
 	Year   int16       `json:"year"`
@@ -58,14 +58,14 @@ type Prayer struct {
 
 type RefreshToken struct {
 	ID        pgtype.UUID        `json:"id"`
-	UserID    string             `json:"user_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
 	Revoked   bool               `json:"revoked"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
 type Subscription struct {
 	ID        pgtype.UUID        `json:"id"`
-	UserID    string             `json:"user_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
 	PlanID    pgtype.UUID        `json:"plan_id"`
 	PaymentID pgtype.UUID        `json:"payment_id"`
 	StartDate pgtype.Timestamptz `json:"start_date"`
@@ -73,8 +73,9 @@ type Subscription struct {
 }
 
 type User struct {
-	ID          string             `json:"id"`
+	ID          pgtype.UUID        `json:"id"`
 	Email       string             `json:"email"`
+	Password    string             `json:"password"`
 	Name        string             `json:"name"`
 	Coordinates pgtype.Point       `json:"coordinates"`
 	City        string             `json:"city"`

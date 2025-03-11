@@ -60,9 +60,8 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 
 	userId := ctx.Value(userIdKey{}).(string)
 	selectPrayersParams := repository.SelectPrayersParams{
-		UserID: userId,
-		Year:   int16(year),
-		Month:  int16(month),
+		Year:  int16(year),
+		Month: int16(month),
 	}
 
 	if dayString := req.URL.Query().Get("day"); dayString != "" {
@@ -77,6 +76,12 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 	}
 
 	prayers, err := retryutil.RetryWithData(func() ([]repository.Prayer, error) {
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return []repository.Prayer{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
+		selectPrayersParams.UserID = pgtype.UUID{Bytes: userUUID, Valid: true}
 		return p.configs.Db.Queries.SelectPrayers(ctx, selectPrayersParams)
 	})
 

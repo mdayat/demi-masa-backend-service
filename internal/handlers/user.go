@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa-backend-service/configs"
@@ -47,7 +49,12 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 	}
 
 	user, err := retryutil.RetryWithData(func() (repository.User, error) {
-		return u.configs.Db.Queries.SelectUserById(ctx, userId)
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return repository.User{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
+		return u.configs.Db.Queries.SelectUserById(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil {
@@ -71,7 +78,7 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 		Timezone  string  `json:"timezone"`
 		CreatedAt string  `json:"created_at"`
 	}{
-		Id:        user.ID,
+		Id:        user.ID.String(),
 		Email:     user.Email,
 		Name:      user.Name,
 		Latitude:  user.Coordinates.P.Y,
@@ -101,7 +108,12 @@ func (u user) GetActiveSubscription(res http.ResponseWriter, req *http.Request) 
 
 	userId := ctx.Value(userIdKey{}).(string)
 	subscription, err := retryutil.RetryWithData(func() (repository.Subscription, error) {
-		return u.configs.Db.Queries.SelectActiveSubscription(ctx, userId)
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return repository.Subscription{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
+		return u.configs.Db.Queries.SelectActiveSubscription(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -144,7 +156,12 @@ func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
 
 	userId := chi.URLParam(req, "userId")
 	err := retryutil.RetryWithoutData(func() error {
-		return u.configs.Db.Queries.DeleteUserByID(ctx, userId)
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
+		return u.configs.Db.Queries.DeleteUserByID(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil {
@@ -191,8 +208,13 @@ func (u user) UpdateUserCoordinates(res http.ResponseWriter, req *http.Request) 
 
 	userId := chi.URLParam(req, "userId")
 	err = retryutil.RetryWithoutData(func() error {
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
 		return u.configs.Db.Queries.UpdateUserCoordinatesById(ctx, repository.UpdateUserCoordinatesByIdParams{
-			ID:          userId,
+			ID:          pgtype.UUID{Bytes: userUUID, Valid: true},
 			Coordinates: pgtype.Point{P: pgtype.Vec2{X: reqBody.Longitude, Y: reqBody.Latitude}, Valid: true},
 			City:        result.City,
 			Timezone:    result.Timezone,

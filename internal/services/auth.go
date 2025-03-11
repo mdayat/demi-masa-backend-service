@@ -26,7 +26,7 @@ type AuthServicer interface {
 	ValidateAccessToken(tokenString string) (*AccessTokenClaims, error)
 	RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) (rotateRefreshTokenResult, error)
 	RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error)
-	AuthenticateUser(ctx context.Context, userId string) (authenticateUserResult, error)
+	AuthenticateUser(ctx context.Context, userUUID pgtype.UUID) (authenticateUserResult, error)
 }
 
 type auth struct {
@@ -180,7 +180,7 @@ func (a auth) ValidateAccessToken(tokenString string) (*AccessTokenClaims, error
 
 type RotateRefreshTokenParams struct {
 	Jti       string
-	UserId    string
+	UserUUID  pgtype.UUID
 	ExpiresAt time.Time
 }
 
@@ -198,13 +198,14 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 
 		err = qtx.RevokeRefreshToken(ctx, repository.RevokeRefreshTokenParams{
 			ID:     pgtype.UUID{Bytes: oldRefreshTokenId, Valid: true},
-			UserID: arg.UserId,
+			UserID: arg.UserUUID,
 		})
 
 		if err != nil {
 			return rotateRefreshTokenResult{}, fmt.Errorf("failed to revoke refresh token: %w", err)
 		}
 
+		userId := arg.UserUUID.String()
 		now := time.Now()
 		remainingExpiration := arg.ExpiresAt.Sub(now)
 
@@ -215,7 +216,7 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 				ExpiresAt: jwt.NewNumericDate(now.Add(remainingExpiration)),
 				IssuedAt:  jwt.NewNumericDate(now),
 				Issuer:    a.configs.Env.OriginURL,
-				Subject:   arg.UserId,
+				Subject:   userId,
 			},
 		}
 
@@ -230,7 +231,7 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 				ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
 				IssuedAt:  jwt.NewNumericDate(now),
 				Issuer:    a.configs.Env.OriginURL,
-				Subject:   arg.UserId,
+				Subject:   userId,
 			},
 		}
 
@@ -246,7 +247,7 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 
 		err = qtx.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
 			ID:        pgtype.UUID{Bytes: newRefreshTokenId, Valid: true},
-			UserID:    arg.UserId,
+			UserID:    arg.UserUUID,
 			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
 		})
 
@@ -275,7 +276,7 @@ const (
 	isya   prayerName = "isya"
 )
 
-func (a auth) createInsertPrayersParams(userId string) []repository.InsertPrayersParams {
+func (a auth) createInsertPrayersParams(userUUID pgtype.UUID) []repository.InsertPrayersParams {
 	now := time.Now()
 	firstDayOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	nextMonth := firstDayOfThisMonth.AddDate(0, 1, 0)
@@ -303,7 +304,7 @@ func (a auth) createInsertPrayersParams(userId string) []repository.InsertPrayer
 
 			insertPrayersParams = append(insertPrayersParams, repository.InsertPrayersParams{
 				ID:     pgtype.UUID{Bytes: uuid.New(), Valid: true},
-				UserID: userId,
+				UserID: userUUID,
 				Name:   string(prayerName),
 				Year:   int16(now.Year()),
 				Month:  int16(now.Month()),
@@ -316,9 +317,10 @@ func (a auth) createInsertPrayersParams(userId string) []repository.InsertPrayer
 }
 
 type RegisterUserParams struct {
-	UserId    string
+	UserUUID  pgtype.UUID
+	Username  string
 	UserEmail string
-	UserName  string
+	Password  string
 }
 
 type registerUserResult struct {
@@ -328,11 +330,14 @@ type registerUserResult struct {
 }
 
 func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error) {
+	// TODO: hash the password
+
 	retryableFunc := func(qtx *repository.Queries) (registerUserResult, error) {
 		user, err := qtx.InsertUser(ctx, repository.InsertUserParams{
-			ID:          arg.UserId,
+			ID:          arg.UserUUID,
+			Name:        arg.Username,
 			Email:       arg.UserEmail,
-			Name:        arg.UserName,
+			Password:    arg.Password,
 			Coordinates: pgtype.Point{P: pgtype.Vec2{X: 106.865036, Y: -6.175110}, Valid: true},
 			City:        "Jakarta",
 			Timezone:    "Asia/Jakarta",
@@ -342,13 +347,15 @@ func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registe
 			return registerUserResult{}, fmt.Errorf("failed to insert user: %w", err)
 		}
 
-		insertPrayersParams := a.createInsertPrayersParams(arg.UserId)
+		insertPrayersParams := a.createInsertPrayersParams(user.ID)
 		_, err = qtx.InsertPrayers(ctx, insertPrayersParams)
 		if err != nil {
 			return registerUserResult{}, fmt.Errorf("failed to insert prayers: %w", err)
 		}
 
+		userId := user.ID.String()
 		now := time.Now()
+
 		refreshTokenClaims := RefreshTokenClaims{
 			Type: Refresh,
 			RegisteredClaims: jwt.RegisteredClaims{
@@ -356,7 +363,7 @@ func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registe
 				ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
 				IssuedAt:  jwt.NewNumericDate(now),
 				Issuer:    a.configs.Env.OriginURL,
-				Subject:   user.ID,
+				Subject:   userId,
 			},
 		}
 
@@ -371,7 +378,7 @@ func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registe
 				ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
 				IssuedAt:  jwt.NewNumericDate(now),
 				Issuer:    a.configs.Env.OriginURL,
-				Subject:   user.ID,
+				Subject:   userId,
 			},
 		}
 
@@ -412,8 +419,10 @@ type authenticateUserResult struct {
 	AccessToken  string
 }
 
-func (a auth) AuthenticateUser(ctx context.Context, userId string) (authenticateUserResult, error) {
+func (a auth) AuthenticateUser(ctx context.Context, userUUID pgtype.UUID) (authenticateUserResult, error) {
+	userId := userUUID.String()
 	now := time.Now()
+
 	refreshTokenClaims := RefreshTokenClaims{
 		Type: Refresh,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -453,7 +462,7 @@ func (a auth) AuthenticateUser(ctx context.Context, userId string) (authenticate
 	err = retryutil.RetryWithoutData(func() error {
 		return a.configs.Db.Queries.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
 			ID:        pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
-			UserID:    userId,
+			UserID:    userUUID,
 			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
 		})
 	})

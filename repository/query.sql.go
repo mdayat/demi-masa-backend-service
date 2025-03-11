@@ -28,7 +28,7 @@ const deleteUserByID = `-- name: DeleteUserByID :exec
 DELETE FROM "user" WHERE id = $1
 `
 
-func (q *Queries) DeleteUserByID(ctx context.Context, id string) error {
+func (q *Queries) DeleteUserByID(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserByID, id)
 	return err
 }
@@ -48,7 +48,7 @@ INSERT INTO invoice (id, user_id, plan_id, ref_id, coupon_code, total_amount, qr
 
 type InsertInvoiceParams struct {
 	ID          pgtype.UUID        `json:"id"`
-	UserID      string             `json:"user_id"`
+	UserID      pgtype.UUID        `json:"user_id"`
 	PlanID      pgtype.UUID        `json:"plan_id"`
 	RefID       string             `json:"ref_id"`
 	CouponCode  pgtype.Text        `json:"coupon_code"`
@@ -89,7 +89,7 @@ INSERT INTO payment (id, user_id, invoice_id, amount_paid, status) VALUES ($1, $
 
 type InsertPaymentParams struct {
 	ID         pgtype.UUID `json:"id"`
-	UserID     string      `json:"user_id"`
+	UserID     pgtype.UUID `json:"user_id"`
 	InvoiceID  pgtype.UUID `json:"invoice_id"`
 	AmountPaid int32       `json:"amount_paid"`
 	Status     string      `json:"status"`
@@ -108,7 +108,7 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) er
 
 type InsertPrayersParams struct {
 	ID     pgtype.UUID `json:"id"`
-	UserID string      `json:"user_id"`
+	UserID pgtype.UUID `json:"user_id"`
 	Name   string      `json:"name"`
 	Year   int16       `json:"year"`
 	Month  int16       `json:"month"`
@@ -121,7 +121,7 @@ INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3)
 
 type InsertRefreshTokenParams struct {
 	ID        pgtype.UUID        `json:"id"`
-	UserID    string             `json:"user_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
@@ -136,7 +136,7 @@ INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date
 
 type InsertSubscriptionParams struct {
 	ID        pgtype.UUID        `json:"id"`
-	UserID    string             `json:"user_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
 	PlanID    pgtype.UUID        `json:"plan_id"`
 	PaymentID pgtype.UUID        `json:"payment_id"`
 	StartDate pgtype.Timestamptz `json:"start_date"`
@@ -156,12 +156,13 @@ func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscription
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO "user" (id, email, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, name, coordinates, city, timezone, created_at
+INSERT INTO "user" (id, email, password, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, password, name, coordinates, city, timezone, created_at
 `
 
 type InsertUserParams struct {
-	ID          string       `json:"id"`
+	ID          pgtype.UUID  `json:"id"`
 	Email       string       `json:"email"`
+	Password    string       `json:"password"`
 	Name        string       `json:"name"`
 	Coordinates pgtype.Point `json:"coordinates"`
 	City        string       `json:"city"`
@@ -172,6 +173,7 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 	row := q.db.QueryRow(ctx, insertUser,
 		arg.ID,
 		arg.Email,
+		arg.Password,
 		arg.Name,
 		arg.Coordinates,
 		arg.City,
@@ -181,6 +183,7 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
+		&i.Password,
 		&i.Name,
 		&i.Coordinates,
 		&i.City,
@@ -196,7 +199,7 @@ UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2
 
 type RevokeRefreshTokenParams struct {
 	ID     pgtype.UUID `json:"id"`
-	UserID string      `json:"user_id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshTokenParams) error {
@@ -214,7 +217,7 @@ AND NOT EXISTS (
 )
 `
 
-func (q *Queries) SelectActiveInvoice(ctx context.Context, userID string) (Invoice, error) {
+func (q *Queries) SelectActiveInvoice(ctx context.Context, userID pgtype.UUID) (Invoice, error) {
 	row := q.db.QueryRow(ctx, selectActiveInvoice, userID)
 	var i Invoice
 	err := row.Scan(
@@ -235,7 +238,7 @@ const selectActiveSubscription = `-- name: SelectActiveSubscription :one
 SELECT id, user_id, plan_id, payment_id, start_date, end_date FROM subscription WHERE user_id = $1 AND end_date > NOW()
 `
 
-func (q *Queries) SelectActiveSubscription(ctx context.Context, userID string) (Subscription, error) {
+func (q *Queries) SelectActiveSubscription(ctx context.Context, userID pgtype.UUID) (Subscription, error) {
 	row := q.db.QueryRow(ctx, selectActiveSubscription, userID)
 	var i Subscription
 	err := row.Scan(
@@ -253,7 +256,7 @@ const selectPayments = `-- name: SelectPayments :many
 SELECT id, user_id, invoice_id, amount_paid, status, created_at FROM payment WHERE user_id = $1
 `
 
-func (q *Queries) SelectPayments(ctx context.Context, userID string) ([]Payment, error) {
+func (q *Queries) SelectPayments(ctx context.Context, userID pgtype.UUID) ([]Payment, error) {
 	rows, err := q.db.Query(ctx, selectPayments, userID)
 	if err != nil {
 		return nil, err
@@ -352,7 +355,7 @@ SELECT id, user_id, name, status, year, month, day FROM prayer WHERE user_id = $
 `
 
 type SelectPrayersParams struct {
-	UserID string      `json:"user_id"`
+	UserID pgtype.UUID `json:"user_id"`
 	Year   int16       `json:"year"`
 	Month  int16       `json:"month"`
 	Day    pgtype.Int2 `json:"day"`
@@ -397,7 +400,7 @@ SELECT id, user_id, revoked, expires_at FROM refresh_token WHERE id = $1 AND use
 
 type SelectRefreshTokenByIdParams struct {
 	ID     pgtype.UUID `json:"id"`
-	UserID string      `json:"user_id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshTokenByIdParams) (RefreshToken, error) {
@@ -412,16 +415,42 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 	return i, err
 }
 
-const selectUserById = `-- name: SelectUserById :one
-SELECT id, email, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1
+const selectUserByEmailAndPassword = `-- name: SelectUserByEmailAndPassword :one
+SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE email = $1 AND password = $2
 `
 
-func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
+type SelectUserByEmailAndPasswordParams struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (q *Queries) SelectUserByEmailAndPassword(ctx context.Context, arg SelectUserByEmailAndPasswordParams) (User, error) {
+	row := q.db.QueryRow(ctx, selectUserByEmailAndPassword, arg.Email, arg.Password)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Password,
+		&i.Name,
+		&i.Coordinates,
+		&i.City,
+		&i.Timezone,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const selectUserById = `-- name: SelectUserById :one
+SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1
+`
+
+func (q *Queries) SelectUserById(ctx context.Context, id pgtype.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, selectUserById, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
+		&i.Password,
 		&i.Name,
 		&i.Coordinates,
 		&i.City,
@@ -432,7 +461,7 @@ func (q *Queries) SelectUserById(ctx context.Context, id string) (User, error) {
 }
 
 const selectUserByInvoiceID = `-- name: SelectUserByInvoiceID :one
-SELECT u.id, u.email, u.name, u.coordinates, u.city, u.timezone, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
+SELECT u.id, u.email, u.password, u.name, u.coordinates, u.city, u.timezone, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
 `
 
 func (q *Queries) SelectUserByInvoiceID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -441,6 +470,7 @@ func (q *Queries) SelectUserByInvoiceID(ctx context.Context, id pgtype.UUID) (Us
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
+		&i.Password,
 		&i.Name,
 		&i.Coordinates,
 		&i.City,
@@ -469,7 +499,7 @@ UPDATE "user" SET coordinates = $2, city = $3, timezone = $4 WHERE id = $1
 `
 
 type UpdateUserCoordinatesByIdParams struct {
-	ID          string       `json:"id"`
+	ID          pgtype.UUID  `json:"id"`
 	Coordinates pgtype.Point `json:"coordinates"`
 	City        string       `json:"city"`
 	Timezone    string       `json:"timezone"`

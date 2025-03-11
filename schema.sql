@@ -1,6 +1,7 @@
 CREATE TABLE "user" (
-  id VARCHAR(255) PRIMARY KEY,
+  id UUID PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
   coordinates POINT NOT NULL,
   city VARCHAR(255) NOT NULL,
@@ -10,7 +11,7 @@ CREATE TABLE "user" (
 
 CREATE TABLE refresh_token (
   id UUID PRIMARY KEY,
-  user_id VARCHAR(255) NOT NULL,
+  user_id UUID NOT NULL,
   revoked BOOLEAN DEFAULT FALSE NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
 
@@ -23,7 +24,7 @@ CREATE TABLE refresh_token (
 
 CREATE TABLE prayer (
   id UUID PRIMARY KEY,
-  user_id VARCHAR(255) NOT NULL,
+  user_id UUID NOT NULL,
   name VARCHAR(16) NOT NULL CHECK (name IN ('subuh', 'zuhur', 'asar', 'magrib', 'isya')),
   status VARCHAR(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'on_time', 'late', 'missed')),
   year SMALLINT NOT NULL,
@@ -60,7 +61,7 @@ CREATE TABLE plan (
 
 CREATE TABLE invoice (
   id UUID PRIMARY KEY,
-  user_id VARCHAR(255) NOT NULL,
+  user_id UUID NOT NULL,
   plan_id UUID NOT NULL,
   ref_id VARCHAR(255) NOT NULL,
   coupon_code VARCHAR(255) NULL,
@@ -90,7 +91,7 @@ CREATE TABLE invoice (
 
 CREATE TABLE payment (
   id UUID PRIMARY KEY,
-  user_id VARCHAR(255) NOT NULL,
+  user_id UUID NOT NULL,
   invoice_id UUID UNIQUE NOT NULL,
   amount_paid INT NOT NULL CHECK (amount_paid >= 0),
   status VARCHAR(16) NOT NULL CHECK (status IN ('paid', 'expired', 'failed', 'refund')),
@@ -111,7 +112,7 @@ CREATE TABLE payment (
 
 CREATE TABLE subscription (
   id UUID PRIMARY KEY,
-  user_id VARCHAR(255) NOT NULL,
+  user_id UUID NOT NULL,
   plan_id UUID NOT NULL,
   payment_id UUID UNIQUE NOT NULL,
   start_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,

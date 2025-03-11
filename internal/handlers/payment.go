@@ -57,7 +57,12 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 
 	userId := ctx.Value(userIdKey{}).(string)
 	invoice, err := retryutil.RetryWithData(func() (repository.Invoice, error) {
-		return p.configs.Db.Queries.SelectActiveInvoice(ctx, userId)
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return repository.Invoice{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
+		return p.configs.Db.Queries.SelectActiveInvoice(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -188,9 +193,14 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 			return repository.Invoice{}, fmt.Errorf("failed to parse plan Id to UUID: %w", err)
 		}
 
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return repository.Invoice{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
 		return p.configs.Db.Queries.InsertInvoice(ctx, repository.InsertInvoiceParams{
 			ID:          pgtype.UUID{Bytes: merchantRef, Valid: true},
-			UserID:      userId,
+			UserID:      pgtype.UUID{Bytes: userUUID, Valid: true},
 			PlanID:      pgtype.UUID{Bytes: planUUID, Valid: true},
 			RefID:       tripayTxResponse.Reference,
 			CouponCode:  couponCode,
@@ -346,7 +356,12 @@ func (p payment) GetPayments(res http.ResponseWriter, req *http.Request) {
 
 	userId := ctx.Value(userIdKey{}).(string)
 	payments, err := retryutil.RetryWithData(func() ([]repository.Payment, error) {
-		return p.configs.Db.Queries.SelectPayments(ctx, userId)
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return []repository.Payment{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
+		return p.configs.Db.Queries.SelectPayments(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil {

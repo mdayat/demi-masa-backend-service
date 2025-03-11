@@ -174,7 +174,7 @@ func (p payment) ValidateCallbackSignature(tripaySignature string, reqBody []byt
 
 type ProcessSuccessfulPaymentParams struct {
 	InvoiceId  string
-	UserId     string
+	UserId     pgtype.UUID
 	AmountPaid int32
 	Status     string
 }
@@ -229,7 +229,7 @@ func (p payment) ProcessSuccessfulPayment(ctx context.Context, arg ProcessSucces
 
 type ProcessUnsuccessfulPaymentParams struct {
 	InvoiceId  string
-	UserId     string
+	UserId     pgtype.UUID
 	AmountPaid int32
 	Status     string
 }
