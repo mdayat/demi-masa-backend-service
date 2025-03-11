@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/crypto/argon2"
 
 	"github.com/mdayat/demi-masa-backend-service/configs"
 	"github.com/mdayat/demi-masa-backend-service/internal/dbutil"
@@ -316,6 +319,33 @@ func (a auth) createInsertPrayersParams(userUUID pgtype.UUID) []repository.Inser
 	return insertPrayersParams
 }
 
+func (a auth) hashPassword(password string) (string, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("failed to generate salt: %w", err)
+	}
+
+	var iterations uint32 = 3
+	var memory uint32 = 64 * 1024
+	var parallelism uint8 = 4
+	var keyLength uint32 = 32
+
+	hash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
+	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
+	encodedHash := base64.RawStdEncoding.EncodeToString(hash)
+
+	finalHash := fmt.Sprintf(
+		"$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
+		memory,
+		iterations,
+		parallelism,
+		encodedSalt,
+		encodedHash,
+	)
+
+	return finalHash, nil
+}
+
 type RegisterUserParams struct {
 	UserUUID  pgtype.UUID
 	Username  string
@@ -330,14 +360,17 @@ type registerUserResult struct {
 }
 
 func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error) {
-	// TODO: hash the password
+	hashedPassword, err := a.hashPassword(arg.Password)
+	if err != nil {
+		return registerUserResult{}, fmt.Errorf("failed to hash password: %w", err)
+	}
 
 	retryableFunc := func(qtx *repository.Queries) (registerUserResult, error) {
 		user, err := qtx.InsertUser(ctx, repository.InsertUserParams{
 			ID:          arg.UserUUID,
 			Name:        arg.Username,
 			Email:       arg.UserEmail,
-			Password:    arg.Password,
+			Password:    hashedPassword,
 			Coordinates: pgtype.Point{P: pgtype.Vec2{X: 106.865036, Y: -6.175110}, Valid: true},
 			City:        "Jakarta",
 			Timezone:    "Asia/Jakarta",
