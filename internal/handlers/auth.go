@@ -135,11 +135,9 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	user, err := retryutil.RetryWithData(func() (repository.User, error) {
-		return a.configs.Db.Queries.SelectUserByEmailAndPassword(ctx, repository.SelectUserByEmailAndPasswordParams{
-			Email:    reqBody.Email,
-			Password: reqBody.Password,
-		})
+	result, err := a.service.AuthenticateUser(ctx, services.AuthenticateUserParams{
+		Email:    reqBody.Email,
+		Password: reqBody.Password,
 	})
 
 	if err != nil {
@@ -153,13 +151,6 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := a.service.AuthenticateUser(ctx, user.ID)
-	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to authenticate user")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
 	resBody := struct {
 		RefreshToken string       `json:"refresh_token"`
 		AccessToken  string       `json:"access_token"`
@@ -168,14 +159,14 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
 		User: userResponse{
-			Id:        user.ID.String(),
-			Email:     user.Email,
-			Name:      user.Name,
-			Latitude:  user.Coordinates.P.Y,
-			Longitude: user.Coordinates.P.X,
-			City:      user.City,
-			Timezone:  user.Timezone,
-			CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
+			Id:        result.User.ID.String(),
+			Email:     result.User.Email,
+			Name:      result.User.Name,
+			Latitude:  result.User.Coordinates.P.Y,
+			Longitude: result.User.Coordinates.P.X,
+			City:      result.User.City,
+			Timezone:  result.User.Timezone,
+			CreatedAt: result.User.CreatedAt.Time.Format(time.RFC3339),
 		},
 	}
 

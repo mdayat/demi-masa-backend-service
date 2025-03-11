@@ -29,7 +29,7 @@ type AuthServicer interface {
 	ValidateAccessToken(tokenString string) (*AccessTokenClaims, error)
 	RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) (rotateRefreshTokenResult, error)
 	RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error)
-	AuthenticateUser(ctx context.Context, userUUID pgtype.UUID) (authenticateUserResult, error)
+	AuthenticateUser(ctx context.Context, arg AuthenticateUserParams) (authenticateUserResult, error)
 }
 
 type auth struct {
@@ -447,13 +447,35 @@ func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registe
 	return dbutil.RetryableTxWithData(ctx, a.configs.Db.Conn, a.configs.Db.Queries, retryableFunc)
 }
 
+type AuthenticateUserParams struct {
+	Email    string
+	Password string
+}
+
 type authenticateUserResult struct {
+	User         repository.User
 	RefreshToken string
 	AccessToken  string
 }
 
-func (a auth) AuthenticateUser(ctx context.Context, userUUID pgtype.UUID) (authenticateUserResult, error) {
-	userId := userUUID.String()
+func (a auth) AuthenticateUser(ctx context.Context, arg AuthenticateUserParams) (authenticateUserResult, error) {
+	hashedPassword, err := a.hashPassword(arg.Password)
+	if err != nil {
+		return authenticateUserResult{}, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user, err := retryutil.RetryWithData(func() (repository.User, error) {
+		return a.configs.Db.Queries.SelectUserByEmailAndPassword(ctx, repository.SelectUserByEmailAndPasswordParams{
+			Email:    arg.Email,
+			Password: hashedPassword,
+		})
+	})
+
+	if err != nil {
+		return authenticateUserResult{}, fmt.Errorf("failed to select user by email and password: %w", err)
+	}
+
+	userId := user.ID.String()
 	now := time.Now()
 
 	refreshTokenClaims := RefreshTokenClaims{
@@ -495,7 +517,7 @@ func (a auth) AuthenticateUser(ctx context.Context, userUUID pgtype.UUID) (authe
 	err = retryutil.RetryWithoutData(func() error {
 		return a.configs.Db.Queries.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
 			ID:        pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
-			UserID:    userUUID,
+			UserID:    user.ID,
 			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
 		})
 	})
@@ -505,6 +527,7 @@ func (a auth) AuthenticateUser(ctx context.Context, userUUID pgtype.UUID) (authe
 	}
 
 	authenticateUserResult := authenticateUserResult{
+		User:         user,
 		RefreshToken: refreshToken,
 		AccessToken:  accessToken,
 	}
