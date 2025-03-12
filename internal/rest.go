@@ -83,6 +83,11 @@ func (r rest) Start() error {
 		planHandler := handlers.NewPlanHandler(r.configs)
 		router.Get("/plans", planHandler.GetPlans)
 		router.Get("/plans/{planId}", planHandler.GetPlan)
+
+		taskService := services.NewTaskService(r.configs)
+		taskHandler := handlers.NewTaskHandler(r.configs, taskService)
+		router.Get("/tasks", taskHandler.GetTasks)
+		router.Post("/tasks", taskHandler.CreateTask)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {
