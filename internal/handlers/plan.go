@@ -32,6 +32,7 @@ func NewPlanHandler(configs configs.Configs) PlanHandler {
 
 type getPlanResponse struct {
 	Id               string `json:"id"`
+	Type             string `json:"type"`
 	Name             string `json:"name"`
 	Price            int32  `json:"price"`
 	DurationInMonths int16  `json:"duration_in_months"`
@@ -56,6 +57,7 @@ func (p plan) GetPlans(res http.ResponseWriter, req *http.Request) {
 	for _, plan := range plans {
 		resBody = append(resBody, getPlanResponse{
 			Id:               plan.ID.String(),
+			Type:             plan.Type,
 			Name:             plan.Name,
 			Price:            plan.Price,
 			DurationInMonths: plan.DurationInMonths,
@@ -99,6 +101,7 @@ func (p plan) GetPlan(res http.ResponseWriter, req *http.Request) {
 
 	resBody := getPlanResponse{
 		Id:               plan.ID.String(),
+		Type:             plan.Type,
 		Name:             plan.Name,
 		Price:            plan.Price,
 		DurationInMonths: plan.DurationInMonths,

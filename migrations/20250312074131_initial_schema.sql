@@ -10,22 +10,25 @@ CREATE TABLE "coupon" (
 -- Create "plan" table
 CREATE TABLE "plan" (
   "id" uuid NOT NULL,
-  "name" character varying(100) NOT NULL,
+  "type" character varying(255) NOT NULL,
+  "name" character varying(255) NOT NULL,
   "price" integer NOT NULL,
   "duration_in_months" smallint NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "deleted_at" timestamptz NULL,
   PRIMARY KEY ("id"),
-  CONSTRAINT "plan_name_key" UNIQUE ("name")
+  CONSTRAINT "plan_name_duration_in_months_key" UNIQUE ("name", "duration_in_months"),
+  CONSTRAINT "plan_name_check" CHECK ((name)::text = 'premium'::text)
 );
 -- Create "user" table
 CREATE TABLE "user" (
-  "id" character varying(255) NOT NULL,
+  "id" uuid NOT NULL,
   "email" character varying(255) NOT NULL,
+  "password" character varying(255) NOT NULL,
   "name" character varying(255) NOT NULL,
   "coordinates" point NOT NULL,
   "city" character varying(255) NOT NULL,
-  "timezone" character varying(8) NOT NULL,
+  "timezone" character varying(255) NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY ("id"),
   CONSTRAINT "user_email_key" UNIQUE ("email")
@@ -33,7 +36,7 @@ CREATE TABLE "user" (
 -- Create "invoice" table
 CREATE TABLE "invoice" (
   "id" uuid NOT NULL,
-  "user_id" character varying(255) NOT NULL,
+  "user_id" uuid NOT NULL,
   "plan_id" uuid NOT NULL,
   "ref_id" character varying(255) NOT NULL,
   "coupon_code" character varying(255) NULL,
@@ -50,7 +53,7 @@ CREATE TABLE "invoice" (
 -- Create "payment" table
 CREATE TABLE "payment" (
   "id" uuid NOT NULL,
-  "user_id" character varying(255) NOT NULL,
+  "user_id" uuid NOT NULL,
   "invoice_id" uuid NOT NULL,
   "amount_paid" integer NOT NULL,
   "status" character varying(16) NOT NULL,
@@ -65,7 +68,7 @@ CREATE TABLE "payment" (
 -- Create "prayer" table
 CREATE TABLE "prayer" (
   "id" uuid NOT NULL,
-  "user_id" character varying(255) NOT NULL,
+  "user_id" uuid NOT NULL,
   "name" character varying(16) NOT NULL,
   "status" character varying(16) NOT NULL DEFAULT 'pending',
   "year" smallint NOT NULL,
@@ -80,7 +83,7 @@ CREATE TABLE "prayer" (
 -- Create "refresh_token" table
 CREATE TABLE "refresh_token" (
   "id" uuid NOT NULL,
-  "user_id" character varying(255) NOT NULL,
+  "user_id" uuid NOT NULL,
   "revoked" boolean NOT NULL DEFAULT false,
   "expires_at" timestamptz NOT NULL,
   PRIMARY KEY ("id"),
@@ -89,7 +92,7 @@ CREATE TABLE "refresh_token" (
 -- Create "subscription" table
 CREATE TABLE "subscription" (
   "id" uuid NOT NULL,
-  "user_id" character varying(255) NOT NULL,
+  "user_id" uuid NOT NULL,
   "plan_id" uuid NOT NULL,
   "payment_id" uuid NOT NULL,
   "start_date" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,

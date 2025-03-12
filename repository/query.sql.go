@@ -284,7 +284,7 @@ func (q *Queries) SelectPayments(ctx context.Context, userID pgtype.UUID) ([]Pay
 }
 
 const selectPlanById = `-- name: SelectPlanById :one
-SELECT id, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE id = $1 AND deleted_at IS NULL
+SELECT id, type, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SelectPlanById(ctx context.Context, id pgtype.UUID) (Plan, error) {
@@ -292,6 +292,7 @@ func (q *Queries) SelectPlanById(ctx context.Context, id pgtype.UUID) (Plan, err
 	var i Plan
 	err := row.Scan(
 		&i.ID,
+		&i.Type,
 		&i.Name,
 		&i.Price,
 		&i.DurationInMonths,
@@ -302,7 +303,7 @@ func (q *Queries) SelectPlanById(ctx context.Context, id pgtype.UUID) (Plan, err
 }
 
 const selectPlanByInvoiceId = `-- name: SelectPlanByInvoiceId :one
-SELECT p.id, p.name, p.price, p.duration_in_months, p.created_at, p.deleted_at FROM invoice i JOIN plan p ON i.plan_id = p.id WHERE i.id = $1
+SELECT p.id, p.type, p.name, p.price, p.duration_in_months, p.created_at, p.deleted_at FROM invoice i JOIN plan p ON i.plan_id = p.id WHERE i.id = $1
 `
 
 func (q *Queries) SelectPlanByInvoiceId(ctx context.Context, id pgtype.UUID) (Plan, error) {
@@ -310,6 +311,7 @@ func (q *Queries) SelectPlanByInvoiceId(ctx context.Context, id pgtype.UUID) (Pl
 	var i Plan
 	err := row.Scan(
 		&i.ID,
+		&i.Type,
 		&i.Name,
 		&i.Price,
 		&i.DurationInMonths,
@@ -320,7 +322,7 @@ func (q *Queries) SelectPlanByInvoiceId(ctx context.Context, id pgtype.UUID) (Pl
 }
 
 const selectPlans = `-- name: SelectPlans :many
-SELECT id, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE deleted_at IS NULL
+SELECT id, type, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE deleted_at IS NULL
 `
 
 func (q *Queries) SelectPlans(ctx context.Context) ([]Plan, error) {
@@ -334,6 +336,7 @@ func (q *Queries) SelectPlans(ctx context.Context) ([]Plan, error) {
 		var i Plan
 		if err := rows.Scan(
 			&i.ID,
+			&i.Type,
 			&i.Name,
 			&i.Price,
 			&i.DurationInMonths,

@@ -39,6 +39,7 @@ type Payment struct {
 
 type Plan struct {
 	ID               pgtype.UUID        `json:"id"`
+	Type             string             `json:"type"`
 	Name             string             `json:"name"`
 	Price            int32              `json:"price"`
 	DurationInMonths int16              `json:"duration_in_months"`

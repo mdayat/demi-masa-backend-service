@@ -102,6 +102,7 @@ type createInvoiceRequest struct {
 	CustomerEmail string `json:"customer_email" validate:"required,email"`
 	Plan          struct {
 		Id               string `json:"id" validate:"required,uuid"`
+		Type             string `json:"type" validate:"required"`
 		Name             string `json:"name" validate:"required"`
 		Price            int    `json:"price" validate:"required"`
 		DurationInMonths int    `json:"duration_in_months" validate:"required"`
@@ -169,6 +170,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 		CustomerEmail: reqBody.CustomerEmail,
 		TotalAmount:   totalAmount,
 		PlanId:        reqBody.Plan.Id,
+		PlanType:      reqBody.Plan.Type,
 		PlanName:      reqBody.Plan.Name,
 		PlanPrice:     totalAmount,
 	})

@@ -50,7 +50,8 @@ CREATE TABLE coupon (
 
 CREATE TABLE plan (
   id UUID PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
+  type VARCHAR(255) NOT NULL CHECK (name IN ('premium')),
+  name VARCHAR(255) NOT NULL,
   price INT NOT NULL,
   duration_in_months SMALLINT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,

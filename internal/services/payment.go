@@ -55,6 +55,7 @@ var QRISPaymentChannel = "QRIS"
 
 type orderItem struct {
 	Id       string `json:"id"`
+	Type     string `json:"type"`
 	Name     string `json:"name"`
 	Price    int    `json:"price"`
 	Quantity int    `json:"quantity"`
@@ -83,6 +84,7 @@ type CreateTripayTxRequestParams struct {
 	CustomerEmail string
 	TotalAmount   int
 	PlanId        string
+	PlanType      string
 	PlanName      string
 	PlanPrice     int
 }
@@ -92,6 +94,7 @@ func (p payment) CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTx
 	orderItems := []orderItem{
 		{
 			Id:       arg.PlanId,
+			Type:     arg.PlanType,
 			Name:     arg.PlanName,
 			Price:    arg.PlanPrice,
 			Quantity: 1,
