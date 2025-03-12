@@ -161,7 +161,7 @@ func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
 			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return u.configs.Db.Queries.DeleteUserByID(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
+		return u.configs.Db.Queries.DeleteUserById(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil {

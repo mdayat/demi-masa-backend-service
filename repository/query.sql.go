@@ -24,21 +24,26 @@ func (q *Queries) DecrementCouponQuota(ctx context.Context, code string) (int64,
 	return result.RowsAffected(), nil
 }
 
-const deleteTaskByID = `-- name: DeleteTaskByID :exec
-DELETE FROM task WHERE id = $1
+const deleteTaskById = `-- name: DeleteTaskById :exec
+DELETE FROM task WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteTaskByID(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteTaskByID, id)
+type DeleteTaskByIdParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteTaskById(ctx context.Context, arg DeleteTaskByIdParams) error {
+	_, err := q.db.Exec(ctx, deleteTaskById, arg.ID, arg.UserID)
 	return err
 }
 
-const deleteUserByID = `-- name: DeleteUserByID :exec
+const deleteUserById = `-- name: DeleteUserById :exec
 DELETE FROM "user" WHERE id = $1
 `
 
-func (q *Queries) DeleteUserByID(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserByID, id)
+func (q *Queries) DeleteUserById(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserById, id)
 	return err
 }
 
@@ -531,12 +536,12 @@ func (q *Queries) SelectUserById(ctx context.Context, id pgtype.UUID) (User, err
 	return i, err
 }
 
-const selectUserByInvoiceID = `-- name: SelectUserByInvoiceID :one
+const selectUserByInvoiceId = `-- name: SelectUserByInvoiceId :one
 SELECT u.id, u.email, u.password, u.name, u.coordinates, u.city, u.timezone, u.created_at FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1
 `
 
-func (q *Queries) SelectUserByInvoiceID(ctx context.Context, id pgtype.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, selectUserByInvoiceID, id)
+func (q *Queries) SelectUserByInvoiceId(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, selectUserByInvoiceId, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -565,25 +570,35 @@ func (q *Queries) UpdatePrayerStatus(ctx context.Context, arg UpdatePrayerStatus
 	return err
 }
 
-const updateTaskByID = `-- name: UpdateTaskByID :exec
-UPDATE task SET name = $2, description = $3, checked = $4 WHERE id = $1
+const updateTaskById = `-- name: UpdateTaskById :one
+UPDATE task SET name = $3, description = $4, checked = $5 WHERE id = $1 AND user_id = $2 RETURNING id, user_id, name, description, checked
 `
 
-type UpdateTaskByIDParams struct {
+type UpdateTaskByIdParams struct {
 	ID          pgtype.UUID `json:"id"`
+	UserID      pgtype.UUID `json:"user_id"`
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
 	Checked     bool        `json:"checked"`
 }
 
-func (q *Queries) UpdateTaskByID(ctx context.Context, arg UpdateTaskByIDParams) error {
-	_, err := q.db.Exec(ctx, updateTaskByID,
+func (q *Queries) UpdateTaskById(ctx context.Context, arg UpdateTaskByIdParams) (Task, error) {
+	row := q.db.QueryRow(ctx, updateTaskById,
 		arg.ID,
+		arg.UserID,
 		arg.Name,
 		arg.Description,
 		arg.Checked,
 	)
-	return err
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Description,
+		&i.Checked,
+	)
+	return i, err
 }
 
 const updateUserCoordinatesById = `-- name: UpdateUserCoordinatesById :exec

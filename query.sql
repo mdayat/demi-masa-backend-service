@@ -7,13 +7,13 @@ SELECT * FROM "user" WHERE id = $1;
 -- name: SelectUserByEmailAndPassword :one
 SELECT * FROM "user" WHERE email = $1 AND password = $2;
 
--- name: SelectUserByInvoiceID :one
+-- name: SelectUserByInvoiceId :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;
 
 -- name: UpdateUserCoordinatesById :exec
 UPDATE "user" SET coordinates = $2, city = $3, timezone = $4 WHERE id = $1;
 
--- name: DeleteUserByID :exec
+-- name: DeleteUserById :exec
 DELETE FROM "user" WHERE id = $1;
 
 -- name: InsertSubscription :exec
@@ -81,8 +81,8 @@ SELECT * FROM task WHERE user_id = $1;
 -- name: InsertTask :one
 INSERT INTO task (id, user_id, name, description) VALUES ($1, $2, $3, $4) RETURNING *;
 
--- name: UpdateTaskByID :exec
-UPDATE task SET name = $2, description = $3, checked = $4 WHERE id = $1;
+-- name: UpdateTaskById :one
+UPDATE task SET name = $3, description = $4, checked = $5 WHERE id = $1 AND user_id = $2 RETURNING *;
 
--- name: DeleteTaskByID :exec
-DELETE FROM task WHERE id = $1;
+-- name: DeleteTaskById :exec
+DELETE FROM task WHERE id = $1 AND user_id = $2;

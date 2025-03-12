@@ -287,7 +287,7 @@ func (p payment) TripayCallback(res http.ResponseWriter, req *http.Request) {
 			return repository.User{}, fmt.Errorf("failed to parse invoice Id to UUID: %w", err)
 		}
 
-		return p.configs.Db.Queries.SelectUserByInvoiceID(ctx, pgtype.UUID{Bytes: invoiceUUID, Valid: true})
+		return p.configs.Db.Queries.SelectUserByInvoiceId(ctx, pgtype.UUID{Bytes: invoiceUUID, Valid: true})
 	})
 
 	if err != nil {

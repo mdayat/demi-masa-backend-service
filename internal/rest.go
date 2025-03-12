@@ -88,6 +88,8 @@ func (r rest) Start() error {
 		taskHandler := handlers.NewTaskHandler(r.configs, taskService)
 		router.Get("/tasks", taskHandler.GetTasks)
 		router.Post("/tasks", taskHandler.CreateTask)
+		router.Put("/tasks/{taskId}", taskHandler.UpdateTask)
+		router.Delete("/tasks/{taskId}", taskHandler.DeleteTask)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {
