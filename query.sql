@@ -74,3 +74,15 @@ SELECT * FROM plan WHERE deleted_at IS NULL;
 
 -- name: SelectPlanById :one
 SELECT * FROM plan WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: SelectTasksByUserId :many
+SELECT * FROM task WHERE user_id = $1;
+
+-- name: InsertTask :one
+INSERT INTO task (id, user_id, name, description) VALUES ($1, $2, $3, $4) RETURNING *;
+
+-- name: UpdateTaskByID :exec
+UPDATE task SET name = $2, description = $3, checked = $4 WHERE id = $1;
+
+-- name: DeleteTaskByID :exec
+DELETE FROM task WHERE id = $1;

@@ -137,3 +137,17 @@ CREATE TABLE subscription (
     ON UPDATE CASCADE
     ON DELETE CASCADE
 );
+
+CREATE TABLE task (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL,
+  checked BOOLEAN DEFAULT FALSE NOT NULL,
+
+  CONSTRAINT fk_task_user_id
+    FOREIGN KEY (user_id)
+    REFERENCES "user"(id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE
+);

@@ -73,6 +73,14 @@ type Subscription struct {
 	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
+type Task struct {
+	ID          pgtype.UUID `json:"id"`
+	UserID      pgtype.UUID `json:"user_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Checked     bool        `json:"checked"`
+}
+
 type User struct {
 	ID          pgtype.UUID        `json:"id"`
 	Email       string             `json:"email"`
