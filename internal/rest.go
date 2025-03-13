@@ -70,6 +70,9 @@ func (r rest) Start() error {
 		router.Delete("/users/{userId}", userHandler.DeleteUser)
 		router.Put("/users/{userId}", userHandler.UpdateUser)
 
+		subscriptionHandler := handlers.NewSubscriptionHandler(r.configs)
+		router.Get("/subscriptions/active", subscriptionHandler.GetActiveSubscription)
+
 		prayerService := services.NewPrayerService(r.configs)
 		prayerHandler := handlers.NewPrayerHandler(r.configs, prayerService)
 		router.Get("/prayers", prayerHandler.GetPrayers)
