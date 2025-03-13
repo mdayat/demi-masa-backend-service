@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/goccy/go-json"
 	"github.com/mdayat/demi-masa-backend-service/configs"
@@ -11,7 +13,8 @@ import (
 )
 
 type UserServicer interface {
-	ReverseGeocode(ctx context.Context, latitude, longitude float64) (reverseGeocodeResult, error)
+	ReverseGeocode(ctx context.Context, latitude, longitude string) (reverseGeocodeResult, error)
+	ParseStringCoordinates(latitudeString, longitudeString string) (float64, float64, error)
 }
 
 type user struct {
@@ -29,9 +32,9 @@ type reverseGeocodeResult struct {
 	Timezone string
 }
 
-func (u user) ReverseGeocode(ctx context.Context, latitude, longitude float64) (reverseGeocodeResult, error) {
+func (u user) ReverseGeocode(ctx context.Context, latitude, longitude string) (reverseGeocodeResult, error) {
 	url := fmt.Sprintf(
-		"https://api.geoapify.com/v1/geocode/reverse?lat=%f&lon=%f&format=json&type=city&apiKey=%s",
+		"https://api.geoapify.com/v1/geocode/reverse?lat=%s&lon=%s&format=json&type=city&apiKey=%s",
 		latitude,
 		longitude,
 		u.configs.Env.GeoapifyAPIKey,
@@ -62,12 +65,32 @@ func (u user) ReverseGeocode(ctx context.Context, latitude, longitude float64) (
 			return reverseGeocodeResult{}, fmt.Errorf("failed to decode reverse geocode result: %w", err)
 		}
 
+		var result reverseGeocodeResult
 		if len(respBody.Results) != 0 {
-			return reverseGeocodeResult{City: respBody.Results[0].City, Timezone: respBody.Results[0].Timezone.Name}, nil
+			result.City = respBody.Results[0].City
+			result.Timezone = respBody.Results[0].Timezone.Name
 		}
 
-		return reverseGeocodeResult{}, nil
+		if result.City == "" || result.Timezone == "" {
+			return result, errors.New("empty reverse geocode result")
+		}
+
+		return result, nil
 	}
 
 	return retryutil.RetryWithData(retryableFunc)
+}
+
+func (u user) ParseStringCoordinates(latitudeString, longitudeString string) (float64, float64, error) {
+	latitude, err := strconv.ParseFloat(latitudeString, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse latitude string to float64: %w", err)
+	}
+
+	longitude, err := strconv.ParseFloat(longitudeString, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse longitude string to float64: %w", err)
+	}
+
+	return latitude, longitude, nil
 }

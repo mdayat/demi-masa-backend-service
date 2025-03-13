@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/dtos"
 	"github.com/mdayat/demi-masa-backend-service/internal/httputil"
 	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 	"github.com/mdayat/demi-masa-backend-service/internal/services"
@@ -19,10 +20,9 @@ import (
 )
 
 type UserHandler interface {
-	GetMe(res http.ResponseWriter, req *http.Request)
-	GetActiveSubscription(res http.ResponseWriter, req *http.Request)
+	GetUser(res http.ResponseWriter, req *http.Request)
 	DeleteUser(res http.ResponseWriter, req *http.Request)
-	UpdateUserCoordinates(res http.ResponseWriter, req *http.Request)
+	UpdateUser(res http.ResponseWriter, req *http.Request)
 }
 
 type user struct {
@@ -37,17 +37,11 @@ func NewUserHandler(configs configs.Configs, service services.UserServicer) User
 	}
 }
 
-func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
+func (u user) GetUser(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	userId := ctx.Value(userIdKey{}).(string)
-	if userId == "" {
-		logger.Error().Err(errors.New("user not found")).Caller().Int("status_code", http.StatusNotFound).Send()
-		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-
+	userId := chi.URLParam(req, "userId")
 	user, err := retryutil.RetryWithData(func() (repository.User, error) {
 		userUUID, err := uuid.Parse(userId)
 		if err != nil {
@@ -68,16 +62,7 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resBody := struct {
-		Id        string  `json:"id"`
-		Email     string  `json:"email"`
-		Name      string  `json:"name"`
-		Latitude  float64 `json:"latitude"`
-		Longitude float64 `json:"longitude"`
-		City      string  `json:"city"`
-		Timezone  string  `json:"timezone"`
-		CreatedAt string  `json:"created_at"`
-	}{
+	resBody := dtos.UserResponse{
 		Id:        user.ID.String(),
 		Email:     user.Email,
 		Name:      user.Name,
@@ -99,55 +84,7 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got me")
-}
-
-func (u user) GetActiveSubscription(res http.ResponseWriter, req *http.Request) {
-	ctx := req.Context()
-	logger := log.Ctx(ctx).With().Logger()
-
-	userId := ctx.Value(userIdKey{}).(string)
-	subscription, err := retryutil.RetryWithData(func() (repository.Subscription, error) {
-		userUUID, err := uuid.Parse(userId)
-		if err != nil {
-			return repository.Subscription{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
-		}
-
-		return u.configs.Db.Queries.SelectActiveSubscription(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
-	})
-
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select active subscription")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	params := httputil.SendSuccessResponseParams{StatusCode: http.StatusOK}
-	if err == nil {
-		resBody := struct {
-			Id        string `json:"id"`
-			PlanId    string `json:"plan_id"`
-			PaymentId string `json:"payment_id"`
-			StartDate string `json:"start_date"`
-			EndDate   string `json:"end_date"`
-		}{
-			Id:        subscription.ID.String(),
-			PlanId:    subscription.PlanID.String(),
-			PaymentId: subscription.PaymentID.String(),
-			StartDate: subscription.StartDate.Time.Format(time.RFC3339),
-			EndDate:   subscription.EndDate.Time.Format(time.RFC3339),
-		}
-
-		params.ResBody = resBody
-	}
-
-	if err := httputil.SendSuccessResponse(res, params); err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got active subscription")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got user")
 }
 
 func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
@@ -175,64 +112,100 @@ func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully deleted user")
+	res.WriteHeader(http.StatusNoContent)
+	logger.Info().Int("status_code", http.StatusNoContent).Msg("successfully deleted user")
 }
 
-func (u user) UpdateUserCoordinates(res http.ResponseWriter, req *http.Request) {
+func (u user) UpdateUser(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	var reqBody struct {
-		Latitude  float64 `json:"latitude" validate:"required,latitude"`
-		Longitude float64 `json:"longitude" validate:"required,longitude"`
-	}
-
+	var reqBody dtos.UserRequest
 	if err := httputil.DecodeAndValidate(req, u.configs.Validate, &reqBody); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
-	result, err := u.service.ReverseGeocode(ctx, reqBody.Latitude, reqBody.Longitude)
-	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to reverse geocode")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	if reqBody.Email == "" && reqBody.Password == "" && reqBody.Name == "" && reqBody.Latitude == "" && reqBody.Longitude == "" {
+		res.WriteHeader(http.StatusNoContent)
+		logger.Info().Int("status_code", http.StatusNoContent).Msg("no update performed")
 		return
 	}
 
-	if result.City == "" || result.Timezone == "" {
-		logger.Error().Err(errors.New("empty reverse geocode result")).Caller().Int("status_code", http.StatusInternalServerError).Send()
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
+	var email pgtype.Text
+	if reqBody.Email != "" {
+		email = pgtype.Text{String: reqBody.Email, Valid: true}
+	}
+
+	var password pgtype.Text
+	if reqBody.Password != "" {
+		password = pgtype.Text{String: reqBody.Password, Valid: true}
+	}
+
+	var name pgtype.Text
+	if reqBody.Name != "" {
+		name = pgtype.Text{String: reqBody.Name, Valid: true}
+	}
+
+	var city pgtype.Text
+	var timezone pgtype.Text
+
+	if reqBody.Latitude != "" && reqBody.Longitude != "" {
+		result, err := u.service.ReverseGeocode(ctx, reqBody.Latitude, reqBody.Longitude)
+		if err != nil {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to reverse geocode")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		city = pgtype.Text{String: result.City, Valid: true}
+		timezone = pgtype.Text{String: result.Timezone, Valid: true}
 	}
 
 	userId := chi.URLParam(req, "userId")
-	err = retryutil.RetryWithoutData(func() error {
+	user, err := retryutil.RetryWithData(func() (repository.User, error) {
 		userUUID, err := uuid.Parse(userId)
 		if err != nil {
-			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
+			return repository.User{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return u.configs.Db.Queries.UpdateUserCoordinatesById(ctx, repository.UpdateUserCoordinatesByIdParams{
+		var coordinates pgtype.Point
+		if reqBody.Latitude != "" && reqBody.Longitude != "" {
+			latitude, longitude, err := u.service.ParseStringCoordinates(reqBody.Latitude, reqBody.Longitude)
+			if err != nil {
+				return repository.User{}, fmt.Errorf("failed to parse string coordinates: %w", err)
+			}
+
+			coordinates = pgtype.Point{P: pgtype.Vec2{X: longitude, Y: latitude}, Valid: true}
+		}
+
+		return u.configs.Db.Queries.UpdateUserById(ctx, repository.UpdateUserByIdParams{
 			ID:          pgtype.UUID{Bytes: userUUID, Valid: true},
-			Coordinates: pgtype.Point{P: pgtype.Vec2{X: reqBody.Longitude, Y: reqBody.Latitude}, Valid: true},
-			City:        result.City,
-			Timezone:    result.Timezone,
+			Email:       email,
+			Password:    password,
+			Name:        name,
+			Coordinates: coordinates,
+			City:        city,
+			Timezone:    timezone,
 		})
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update user coordinates")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update user")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
-	resBody := struct {
-		TimeZone string `json:"time_zone"`
-		City     string `json:"city"`
-	}{
-		TimeZone: result.Timezone,
-		City:     result.City,
+	resBody := dtos.UserResponse{
+		Id:        user.ID.String(),
+		Email:     user.Email,
+		Name:      user.Name,
+		Latitude:  user.Coordinates.P.Y,
+		Longitude: user.Coordinates.P.X,
+		City:      user.City,
+		Timezone:  user.Timezone,
+		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
 	}
 
 	params := httputil.SendSuccessResponseParams{
@@ -246,5 +219,5 @@ func (u user) UpdateUserCoordinates(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully updated user coordinates")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully updated user")
 }

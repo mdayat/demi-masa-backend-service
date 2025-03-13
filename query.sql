@@ -10,8 +10,16 @@ SELECT * FROM "user" WHERE email = $1 AND password = $2;
 -- name: SelectUserByInvoiceId :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;
 
--- name: UpdateUserCoordinatesById :exec
-UPDATE "user" SET coordinates = $2, city = $3, timezone = $4 WHERE id = $1;
+-- name: UpdateUserById :one
+UPDATE "user"
+SET
+  email = COALESCE(sqlc.narg(email), email),
+  password = COALESCE(sqlc.narg(password), password),
+  name = COALESCE(sqlc.narg(name), name),
+  coordinates = COALESCE(sqlc.narg(coordinates), coordinates),
+  city = COALESCE(sqlc.narg(city), city),
+  timezone = COALESCE(sqlc.narg(timezone), timezone)
+WHERE id = $1 RETURNING *;
 
 -- name: DeleteUserById :exec
 DELETE FROM "user" WHERE id = $1;

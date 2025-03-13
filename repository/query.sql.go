@@ -601,23 +601,48 @@ func (q *Queries) UpdateTaskById(ctx context.Context, arg UpdateTaskByIdParams) 
 	return i, err
 }
 
-const updateUserCoordinatesById = `-- name: UpdateUserCoordinatesById :exec
-UPDATE "user" SET coordinates = $2, city = $3, timezone = $4 WHERE id = $1
+const updateUserById = `-- name: UpdateUserById :one
+UPDATE "user"
+SET
+  email = COALESCE($2, email),
+  password = COALESCE($3, password),
+  name = COALESCE($4, name),
+  coordinates = COALESCE($5, coordinates),
+  city = COALESCE($6, city),
+  timezone = COALESCE($7, timezone)
+WHERE id = $1 RETURNING id, email, password, name, coordinates, city, timezone, created_at
 `
 
-type UpdateUserCoordinatesByIdParams struct {
+type UpdateUserByIdParams struct {
 	ID          pgtype.UUID  `json:"id"`
+	Email       pgtype.Text  `json:"email"`
+	Password    pgtype.Text  `json:"password"`
+	Name        pgtype.Text  `json:"name"`
 	Coordinates pgtype.Point `json:"coordinates"`
-	City        string       `json:"city"`
-	Timezone    string       `json:"timezone"`
+	City        pgtype.Text  `json:"city"`
+	Timezone    pgtype.Text  `json:"timezone"`
 }
 
-func (q *Queries) UpdateUserCoordinatesById(ctx context.Context, arg UpdateUserCoordinatesByIdParams) error {
-	_, err := q.db.Exec(ctx, updateUserCoordinatesById,
+func (q *Queries) UpdateUserById(ctx context.Context, arg UpdateUserByIdParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserById,
 		arg.ID,
+		arg.Email,
+		arg.Password,
+		arg.Name,
 		arg.Coordinates,
 		arg.City,
 		arg.Timezone,
 	)
-	return err
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Password,
+		&i.Name,
+		&i.Coordinates,
+		&i.City,
+		&i.Timezone,
+		&i.CreatedAt,
+	)
+	return i, err
 }
