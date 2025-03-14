@@ -396,50 +396,6 @@ func (q *Queries) SelectPlans(ctx context.Context) ([]Plan, error) {
 	return items, nil
 }
 
-const selectPrayers = `-- name: SelectPrayers :many
-SELECT id, user_id, name, status, year, month, day FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = $4 OR $4 IS NULL)
-`
-
-type SelectPrayersParams struct {
-	UserID pgtype.UUID `json:"user_id"`
-	Year   int16       `json:"year"`
-	Month  int16       `json:"month"`
-	Day    pgtype.Int2 `json:"day"`
-}
-
-func (q *Queries) SelectPrayers(ctx context.Context, arg SelectPrayersParams) ([]Prayer, error) {
-	rows, err := q.db.Query(ctx, selectPrayers,
-		arg.UserID,
-		arg.Year,
-		arg.Month,
-		arg.Day,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Prayer
-	for rows.Next() {
-		var i Prayer
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Name,
-			&i.Status,
-			&i.Year,
-			&i.Month,
-			&i.Day,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const selectRefreshTokenById = `-- name: SelectRefreshTokenById :one
 SELECT id, user_id, revoked, expires_at FROM refresh_token WHERE id = $1 AND user_id = $2
 `
@@ -551,18 +507,50 @@ func (q *Queries) SelectUserByInvoiceId(ctx context.Context, id pgtype.UUID) (Us
 	return i, err
 }
 
-const updatePrayerStatus = `-- name: UpdatePrayerStatus :exec
-UPDATE prayer SET status = $2 WHERE id = $1
+const selectUserPrayers = `-- name: SelectUserPrayers :many
+SELECT id, user_id, name, status, year, month, day FROM prayer
+WHERE user_id = $1 AND year = $2 AND month = $3
+AND (day = $4 OR $4 IS NULL)
 `
 
-type UpdatePrayerStatusParams struct {
-	ID     pgtype.UUID `json:"id"`
-	Status string      `json:"status"`
+type SelectUserPrayersParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Year   int16       `json:"year"`
+	Month  int16       `json:"month"`
+	Day    pgtype.Int2 `json:"day"`
 }
 
-func (q *Queries) UpdatePrayerStatus(ctx context.Context, arg UpdatePrayerStatusParams) error {
-	_, err := q.db.Exec(ctx, updatePrayerStatus, arg.ID, arg.Status)
-	return err
+func (q *Queries) SelectUserPrayers(ctx context.Context, arg SelectUserPrayersParams) ([]Prayer, error) {
+	rows, err := q.db.Query(ctx, selectUserPrayers,
+		arg.UserID,
+		arg.Year,
+		arg.Month,
+		arg.Day,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Prayer
+	for rows.Next() {
+		var i Prayer
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Status,
+			&i.Year,
+			&i.Month,
+			&i.Day,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateTaskById = `-- name: UpdateTaskById :one
@@ -638,6 +626,33 @@ func (q *Queries) UpdateUserById(ctx context.Context, arg UpdateUserByIdParams) 
 		&i.City,
 		&i.Timezone,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateUserPrayer = `-- name: UpdateUserPrayer :one
+UPDATE prayer
+SET status = COALESCE($3, status)
+WHERE id = $1 AND user_id = $2 RETURNING id, user_id, name, status, year, month, day
+`
+
+type UpdateUserPrayerParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+	Status pgtype.Text `json:"status"`
+}
+
+func (q *Queries) UpdateUserPrayer(ctx context.Context, arg UpdateUserPrayerParams) (Prayer, error) {
+	row := q.db.QueryRow(ctx, updateUserPrayer, arg.ID, arg.UserID, arg.Status)
+	var i Prayer
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Status,
+		&i.Year,
+		&i.Month,
+		&i.Day,
 	)
 	return i, err
 }

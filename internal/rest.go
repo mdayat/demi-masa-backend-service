@@ -76,7 +76,7 @@ func (r rest) Start() error {
 		prayerService := services.NewPrayerService(r.configs)
 		prayerHandler := handlers.NewPrayerHandler(r.configs, prayerService)
 		router.Get("/prayers", prayerHandler.GetPrayers)
-		router.Put("/prayers/{prayerId}", prayerHandler.UpdatePrayerStatus)
+		router.Put("/prayers/{prayerId}", prayerHandler.UpdatePrayer)
 
 		router.Get("/invoices/active", paymentHandler.GetActiveInvoice)
 		router.Post("/invoices", paymentHandler.CreateInvoice)

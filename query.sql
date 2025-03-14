@@ -43,11 +43,15 @@ UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2;
 INSERT INTO prayer (id, user_id, name, year, month, day)
 VALUES ($1, $2, $3, $4, $5, $6);
 
--- name: SelectPrayers :many
-SELECT * FROM prayer WHERE user_id = $1 AND year = $2 AND month = $3 AND (day = sqlc.narg('day') OR sqlc.narg('day') IS NULL);
+-- name: SelectUserPrayers :many
+SELECT * FROM prayer
+WHERE user_id = $1 AND year = $2 AND month = $3
+AND (day = sqlc.narg('day') OR sqlc.narg('day') IS NULL);
 
--- name: UpdatePrayerStatus :exec
-UPDATE prayer SET status = $2 WHERE id = $1;
+-- name: UpdateUserPrayer :one
+UPDATE prayer
+SET status = COALESCE(sqlc.narg(status), status)
+WHERE id = $1 AND user_id = $2 RETURNING *;
 
 -- name: InsertInvoice :one
 INSERT INTO invoice (id, user_id, plan_id, ref_id, coupon_code, total_amount, qr_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;

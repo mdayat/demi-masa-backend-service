@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/dtos"
 	"github.com/mdayat/demi-masa-backend-service/internal/httputil"
 	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 	"github.com/mdayat/demi-masa-backend-service/internal/services"
@@ -20,7 +21,7 @@ import (
 
 type PrayerHandler interface {
 	GetPrayers(res http.ResponseWriter, req *http.Request)
-	UpdatePrayerStatus(res http.ResponseWriter, req *http.Request)
+	UpdatePrayer(res http.ResponseWriter, req *http.Request)
 }
 
 type prayer struct {
@@ -33,15 +34,6 @@ func NewPrayerHandler(configs configs.Configs, service services.PrayerServicer) 
 		configs: configs,
 		service: service,
 	}
-}
-
-type getPrayersResponse struct {
-	Id     string `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Year   int16  `json:"year"`
-	Month  int16  `json:"month"`
-	Day    int16  `json:"day"`
 }
 
 func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
@@ -58,8 +50,7 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	userId := ctx.Value(userIdKey{}).(string)
-	selectPrayersParams := repository.SelectPrayersParams{
+	selectPrayersParams := repository.SelectUserPrayersParams{
 		Year:  int16(year),
 		Month: int16(month),
 	}
@@ -75,6 +66,7 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 		selectPrayersParams.Day = pgtype.Int2{Int16: int16(day), Valid: true}
 	}
 
+	userId := ctx.Value(userIdKey{}).(string)
 	prayers, err := retryutil.RetryWithData(func() ([]repository.Prayer, error) {
 		userUUID, err := uuid.Parse(userId)
 		if err != nil {
@@ -82,7 +74,7 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 		}
 
 		selectPrayersParams.UserID = pgtype.UUID{Bytes: userUUID, Valid: true}
-		return p.configs.Db.Queries.SelectPrayers(ctx, selectPrayersParams)
+		return p.configs.Db.Queries.SelectUserPrayers(ctx, selectPrayersParams)
 	})
 
 	if err != nil {
@@ -91,9 +83,9 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resBody := make([]getPrayersResponse, 0, len(prayers))
+	resBody := make([]dtos.PrayerResponse, 0, len(prayers))
 	for _, prayer := range prayers {
-		resBody = append(resBody, getPrayersResponse{
+		resBody = append(resBody, dtos.PrayerResponse{
 			Id:     prayer.ID.String(),
 			Name:   prayer.Name,
 			Status: prayer.Status,
@@ -117,31 +109,46 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got prayers")
 }
 
-func (p prayer) UpdatePrayerStatus(res http.ResponseWriter, req *http.Request) {
+func (p prayer) UpdatePrayer(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	var reqBody struct {
-		Id     string `json:"id" validate:"required,uuid"`
-		Status string `json:"status" validate:"required"`
-	}
-
+	var reqBody dtos.PrayerRequest
 	if err := httputil.DecodeAndValidate(req, p.configs.Validate, &reqBody); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
+	if reqBody.Status == "" {
+		res.WriteHeader(http.StatusNoContent)
+		logger.Info().Int("status_code", http.StatusNoContent).Msg("no update performed")
+		return
+	}
+
+	var status pgtype.Text
+	if reqBody.Status != "" {
+		status = pgtype.Text{String: reqBody.Status, Valid: true}
+	}
+
 	prayerId := chi.URLParam(req, "prayerId")
-	err := retryutil.RetryWithoutData(func() error {
+	userId := ctx.Value(userIdKey{}).(string)
+
+	prayer, err := retryutil.RetryWithData(func() (repository.Prayer, error) {
 		prayerUUID, err := uuid.Parse(prayerId)
 		if err != nil {
-			return fmt.Errorf("failed to parse prayer Id to UUID: %w", err)
+			return repository.Prayer{}, fmt.Errorf("failed to parse prayer Id to UUID: %w", err)
 		}
 
-		return p.configs.Db.Queries.UpdatePrayerStatus(ctx, repository.UpdatePrayerStatusParams{
+		userUUID, err := uuid.Parse(userId)
+		if err != nil {
+			return repository.Prayer{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+		}
+
+		return p.configs.Db.Queries.UpdateUserPrayer(ctx, repository.UpdateUserPrayerParams{
 			ID:     pgtype.UUID{Bytes: prayerUUID, Valid: true},
-			Status: reqBody.Status,
+			UserID: pgtype.UUID{Bytes: userUUID, Valid: true},
+			Status: status,
 		})
 	})
 
@@ -153,6 +160,26 @@ func (p prayer) UpdatePrayerStatus(res http.ResponseWriter, req *http.Request) {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update prayer status")
 			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
+		return
+	}
+
+	resBody := dtos.PrayerResponse{
+		Id:     prayer.ID.String(),
+		Name:   prayer.Name,
+		Status: prayer.Status,
+		Year:   prayer.Year,
+		Month:  prayer.Month,
+		Day:    prayer.Day,
+	}
+
+	params := httputil.SendSuccessResponseParams{
+		StatusCode: http.StatusOK,
+		ResBody:    resBody,
+	}
+
+	if err := httputil.SendSuccessResponse(res, params); err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to send success response")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
