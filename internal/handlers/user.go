@@ -20,7 +20,7 @@ import (
 )
 
 type UserHandler interface {
-	GetUser(res http.ResponseWriter, req *http.Request)
+	GetMe(res http.ResponseWriter, req *http.Request)
 	DeleteUser(res http.ResponseWriter, req *http.Request)
 	UpdateUser(res http.ResponseWriter, req *http.Request)
 }
@@ -37,11 +37,11 @@ func NewUserHandler(configs configs.Configs, service services.UserServicer) User
 	}
 }
 
-func (u user) GetUser(res http.ResponseWriter, req *http.Request) {
+func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	userId := chi.URLParam(req, "userId")
+	userId := ctx.Value(userIdKey{}).(string)
 	user, err := retryutil.RetryWithData(func() (repository.User, error) {
 		userUUID, err := uuid.Parse(userId)
 		if err != nil {
@@ -84,7 +84,7 @@ func (u user) GetUser(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got user")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got me")
 }
 
 func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
