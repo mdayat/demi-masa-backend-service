@@ -1,14 +1,16 @@
 package handlers
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/dtos"
 	"github.com/mdayat/demi-masa-backend-service/internal/httputil"
 	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 	"github.com/mdayat/demi-masa-backend-service/repository"
@@ -30,15 +32,6 @@ func NewPlanHandler(configs configs.Configs) PlanHandler {
 	}
 }
 
-type getPlanResponse struct {
-	Id               string `json:"id"`
-	Type             string `json:"type"`
-	Name             string `json:"name"`
-	Price            int32  `json:"price"`
-	DurationInMonths int16  `json:"duration_in_months"`
-	CreatedAt        string `json:"created_at"`
-}
-
 func (p plan) GetPlans(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
@@ -53,9 +46,9 @@ func (p plan) GetPlans(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resBody := make([]getPlanResponse, 0, len(plans))
+	resBody := make([]dtos.PlanResponse, 0, len(plans))
 	for _, plan := range plans {
-		resBody = append(resBody, getPlanResponse{
+		resBody = append(resBody, dtos.PlanResponse{
 			Id:               plan.ID.String(),
 			Type:             plan.Type,
 			Name:             plan.Name,
@@ -84,22 +77,29 @@ func (p plan) GetPlan(res http.ResponseWriter, req *http.Request) {
 	logger := log.Ctx(ctx).With().Logger()
 
 	planId := chi.URLParam(req, "planId")
-	plan, err := retryutil.RetryWithData(func() (repository.Plan, error) {
-		planUUID, err := uuid.Parse(planId)
-		if err != nil {
-			return repository.Plan{}, fmt.Errorf("failed to parse plan Id to UUID: %w", err)
-		}
+	planUUID, err := uuid.Parse(planId)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("plan not found")
+		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
 
+	plan, err := retryutil.RetryWithData(func() (repository.Plan, error) {
 		return p.configs.Db.Queries.SelectPlanById(ctx, pgtype.UUID{Bytes: planUUID, Valid: true})
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select plan by Id")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("plan not found")
+			http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		} else {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select plan by Id")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		return
 	}
 
-	resBody := getPlanResponse{
+	resBody := dtos.PlanResponse{
 		Id:               plan.ID.String(),
 		Type:             plan.Type,
 		Name:             plan.Name,
