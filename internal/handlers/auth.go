@@ -188,25 +188,15 @@ func (a auth) Logout(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	var reqBody struct {
-		UserId string `json:"user_id" validate:"required"`
-	}
-
-	if err := httputil.DecodeAndValidate(req, a.configs.Validate, &reqBody); err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
-		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	bearerToken := req.Header.Get("Authorization")
-	if bearerToken == "" || !strings.Contains(bearerToken, "Bearer") {
+	authHeader := req.Header.Get("Authorization")
+	splittedAuthHeader := strings.Split(authHeader, "Bearer ")
+	if authHeader == "" || len(splittedAuthHeader) != 2 {
 		logger.Error().Err(errors.New("invalid authorization header")).Caller().Int("status_code", http.StatusUnauthorized).Send()
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
-	refreshToken := strings.Split(bearerToken, "Bearer ")[1]
-	claims, err := a.service.ValidateRefreshToken(refreshToken)
+	claims, err := a.service.ValidateRefreshToken(splittedAuthHeader[1])
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid refresh token")
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
@@ -219,7 +209,7 @@ func (a auth) Logout(res http.ResponseWriter, req *http.Request) {
 			return fmt.Errorf("failed to parse JTI to UUID: %w", err)
 		}
 
-		userUUID, err := uuid.Parse(reqBody.UserId)
+		userUUID, err := uuid.Parse(claims.Subject)
 		if err != nil {
 			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
