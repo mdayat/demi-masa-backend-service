@@ -62,11 +62,11 @@ func (r rest) Start() error {
 	r.router.Post("/payments/callback", paymentHandler.TripayCallback)
 
 	r.router.Group(func(router chi.Router) {
-		router.Use(customMiddleware.Authenticate)
+		// router.Use(customMiddleware.Authenticate)
 
 		userService := services.NewUserService(r.configs)
 		userHandler := handlers.NewUserHandler(r.configs, userService)
-		router.Get("/users/me", userHandler.GetMe)
+		router.Get("/users/me", userHandler.GetUser)
 		router.Delete("/users/me", userHandler.DeleteUser)
 		router.Put("/users/me", userHandler.UpdateUser)
 
@@ -86,8 +86,7 @@ func (r rest) Start() error {
 		router.Get("/plans", planHandler.GetPlans)
 		router.Get("/plans/{planId}", planHandler.GetPlan)
 
-		taskService := services.NewTaskService(r.configs)
-		taskHandler := handlers.NewTaskHandler(r.configs, taskService)
+		taskHandler := handlers.NewTaskHandler(r.configs)
 		router.Get("/tasks", taskHandler.GetTasks)
 		router.Post("/tasks", taskHandler.CreateTask)
 		router.Put("/tasks/{taskId}", taskHandler.UpdateTask)

@@ -78,7 +78,7 @@ func (p prayer) GetPrayers(res http.ResponseWriter, req *http.Request) {
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select prayers")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user prayers")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -120,6 +120,14 @@ func (p prayer) UpdatePrayer(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	prayerId := chi.URLParam(req, "prayerId")
+	prayerUUID, err := uuid.Parse(prayerId)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("prayer not found")
+		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+
 	if reqBody.Status == "" {
 		res.WriteHeader(http.StatusNoContent)
 		logger.Info().Int("status_code", http.StatusNoContent).Msg("no update performed")
@@ -131,15 +139,8 @@ func (p prayer) UpdatePrayer(res http.ResponseWriter, req *http.Request) {
 		status = pgtype.Text{String: reqBody.Status, Valid: true}
 	}
 
-	prayerId := chi.URLParam(req, "prayerId")
 	userId := ctx.Value(userIdKey{}).(string)
-
 	prayer, err := retryutil.RetryWithData(func() (repository.Prayer, error) {
-		prayerUUID, err := uuid.Parse(prayerId)
-		if err != nil {
-			return repository.Prayer{}, fmt.Errorf("failed to parse prayer Id to UUID: %w", err)
-		}
-
 		userUUID, err := uuid.Parse(userId)
 		if err != nil {
 			return repository.Prayer{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
@@ -157,7 +158,7 @@ func (p prayer) UpdatePrayer(res http.ResponseWriter, req *http.Request) {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("prayer not found")
 			http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
-			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update prayer status")
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update user prayer")
 			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
@@ -183,5 +184,5 @@ func (p prayer) UpdatePrayer(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully updated prayer status")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully updated prayer")
 }

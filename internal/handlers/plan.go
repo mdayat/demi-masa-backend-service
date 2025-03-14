@@ -85,7 +85,7 @@ func (p plan) GetPlan(res http.ResponseWriter, req *http.Request) {
 	}
 
 	plan, err := retryutil.RetryWithData(func() (repository.Plan, error) {
-		return p.configs.Db.Queries.SelectPlanById(ctx, pgtype.UUID{Bytes: planUUID, Valid: true})
+		return p.configs.Db.Queries.SelectPlan(ctx, pgtype.UUID{Bytes: planUUID, Valid: true})
 	})
 
 	if err != nil {
@@ -93,7 +93,7 @@ func (p plan) GetPlan(res http.ResponseWriter, req *http.Request) {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("plan not found")
 			http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
-			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select plan by Id")
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select plan")
 			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
@@ -119,5 +119,5 @@ func (p plan) GetPlan(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got plan by Id")
+	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got plan")
 }

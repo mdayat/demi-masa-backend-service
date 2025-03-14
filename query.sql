@@ -1,7 +1,8 @@
 -- name: InsertUser :one
-INSERT INTO "user" (id, email, password, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+INSERT INTO "user" (id, email, password, name, coordinates, city, timezone)
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
 
--- name: SelectUserById :one
+-- name: SelectUser :one
 SELECT * FROM "user" WHERE id = $1;
 
 -- name: SelectUserByEmail :one
@@ -10,7 +11,7 @@ SELECT * FROM "user" WHERE email = $1;
 -- name: SelectUserByInvoiceId :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;
 
--- name: UpdateUserById :one
+-- name: UpdateUser :one
 UPDATE "user"
 SET
   email = COALESCE(sqlc.narg(email), email),
@@ -21,13 +22,13 @@ SET
   timezone = COALESCE(sqlc.narg(timezone), timezone)
 WHERE id = $1 RETURNING *;
 
--- name: DeleteUserById :exec
+-- name: DeleteUser :exec
 DELETE FROM "user" WHERE id = $1;
 
 -- name: InsertSubscription :exec
 INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date) VALUES ($1, $2, $3, $4, $5, $6);
 
--- name: SelectActiveSubscription :one
+-- name: SelectUserActiveSubscription :one
 SELECT * FROM subscription WHERE user_id = $1 AND end_date > NOW();
 
 -- name: InsertRefreshToken :exec
@@ -84,17 +85,23 @@ SELECT p.* FROM invoice i JOIN plan p ON i.plan_id = p.id WHERE i.id = $1;
 -- name: SelectPlans :many
 SELECT * FROM plan WHERE deleted_at IS NULL;
 
--- name: SelectPlanById :one
+-- name: SelectPlan :one
 SELECT * FROM plan WHERE id = $1 AND deleted_at IS NULL;
 
--- name: SelectTasksByUserId :many
+-- name: SelectUserTasks :many
 SELECT * FROM task WHERE user_id = $1;
 
--- name: InsertTask :one
-INSERT INTO task (id, user_id, name, description) VALUES ($1, $2, $3, $4) RETURNING *;
+-- name: InsertUserTask :one
+INSERT INTO task (id, user_id, name, description)
+VALUES ($1, $2, $3, $4) RETURNING *;
 
--- name: UpdateTaskById :one
-UPDATE task SET name = $3, description = $4, checked = $5 WHERE id = $1 AND user_id = $2 RETURNING *;
+-- name: UpdateUserTask :one
+UPDATE task
+SET
+  name = COALESCE(sqlc.narg(name), name),
+  description = COALESCE(sqlc.narg(description), description),
+  checked = COALESCE(sqlc.narg(checked), checked)
+WHERE id = $1 AND user_id = $2 RETURNING *;
 
--- name: DeleteTaskById :exec
+-- name: DeleteUserTask :exec
 DELETE FROM task WHERE id = $1 AND user_id = $2;

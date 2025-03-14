@@ -19,7 +19,7 @@ import (
 )
 
 type UserHandler interface {
-	GetMe(res http.ResponseWriter, req *http.Request)
+	GetUser(res http.ResponseWriter, req *http.Request)
 	DeleteUser(res http.ResponseWriter, req *http.Request)
 	UpdateUser(res http.ResponseWriter, req *http.Request)
 }
@@ -36,7 +36,7 @@ func NewUserHandler(configs configs.Configs, service services.UserServicer) User
 	}
 }
 
-func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
+func (u user) GetUser(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
@@ -47,7 +47,7 @@ func (u user) GetMe(res http.ResponseWriter, req *http.Request) {
 			return repository.User{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return u.configs.Db.Queries.SelectUserById(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
+		return u.configs.Db.Queries.SelectUser(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil {
@@ -97,7 +97,7 @@ func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
 			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return u.configs.Db.Queries.DeleteUserById(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
+		return u.configs.Db.Queries.DeleteUser(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil {
@@ -179,7 +179,7 @@ func (u user) UpdateUser(res http.ResponseWriter, req *http.Request) {
 			coordinates = pgtype.Point{P: pgtype.Vec2{X: longitude, Y: latitude}, Valid: true}
 		}
 
-		return u.configs.Db.Queries.UpdateUserById(ctx, repository.UpdateUserByIdParams{
+		return u.configs.Db.Queries.UpdateUser(ctx, repository.UpdateUserParams{
 			ID:          pgtype.UUID{Bytes: userUUID, Valid: true},
 			Email:       email,
 			Password:    password,

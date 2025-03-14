@@ -24,26 +24,26 @@ func (q *Queries) DecrementCouponQuota(ctx context.Context, code string) (int64,
 	return result.RowsAffected(), nil
 }
 
-const deleteTaskById = `-- name: DeleteTaskById :exec
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM "user" WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
+	return err
+}
+
+const deleteUserTask = `-- name: DeleteUserTask :exec
 DELETE FROM task WHERE id = $1 AND user_id = $2
 `
 
-type DeleteTaskByIdParams struct {
+type DeleteUserTaskParams struct {
 	ID     pgtype.UUID `json:"id"`
 	UserID pgtype.UUID `json:"user_id"`
 }
 
-func (q *Queries) DeleteTaskById(ctx context.Context, arg DeleteTaskByIdParams) error {
-	_, err := q.db.Exec(ctx, deleteTaskById, arg.ID, arg.UserID)
-	return err
-}
-
-const deleteUserById = `-- name: DeleteUserById :exec
-DELETE FROM "user" WHERE id = $1
-`
-
-func (q *Queries) DeleteUserById(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserById, id)
+func (q *Queries) DeleteUserTask(ctx context.Context, arg DeleteUserTaskParams) error {
+	_, err := q.db.Exec(ctx, deleteUserTask, arg.ID, arg.UserID)
 	return err
 }
 
@@ -169,37 +169,9 @@ func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscription
 	return err
 }
 
-const insertTask = `-- name: InsertTask :one
-INSERT INTO task (id, user_id, name, description) VALUES ($1, $2, $3, $4) RETURNING id, user_id, name, description, checked
-`
-
-type InsertTaskParams struct {
-	ID          pgtype.UUID `json:"id"`
-	UserID      pgtype.UUID `json:"user_id"`
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-}
-
-func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (Task, error) {
-	row := q.db.QueryRow(ctx, insertTask,
-		arg.ID,
-		arg.UserID,
-		arg.Name,
-		arg.Description,
-	)
-	var i Task
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Name,
-		&i.Description,
-		&i.Checked,
-	)
-	return i, err
-}
-
 const insertUser = `-- name: InsertUser :one
-INSERT INTO "user" (id, email, password, name, coordinates, city, timezone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, password, name, coordinates, city, timezone, created_at
+INSERT INTO "user" (id, email, password, name, coordinates, city, timezone)
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, password, name, coordinates, city, timezone, created_at
 `
 
 type InsertUserParams struct {
@@ -232,6 +204,36 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		&i.City,
 		&i.Timezone,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertUserTask = `-- name: InsertUserTask :one
+INSERT INTO task (id, user_id, name, description)
+VALUES ($1, $2, $3, $4) RETURNING id, user_id, name, description, checked
+`
+
+type InsertUserTaskParams struct {
+	ID          pgtype.UUID `json:"id"`
+	UserID      pgtype.UUID `json:"user_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+}
+
+func (q *Queries) InsertUserTask(ctx context.Context, arg InsertUserTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, insertUserTask,
+		arg.ID,
+		arg.UserID,
+		arg.Name,
+		arg.Description,
+	)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Description,
+		&i.Checked,
 	)
 	return i, err
 }
@@ -277,24 +279,6 @@ func (q *Queries) SelectActiveInvoice(ctx context.Context, userID pgtype.UUID) (
 	return i, err
 }
 
-const selectActiveSubscription = `-- name: SelectActiveSubscription :one
-SELECT id, user_id, plan_id, payment_id, start_date, end_date FROM subscription WHERE user_id = $1 AND end_date > NOW()
-`
-
-func (q *Queries) SelectActiveSubscription(ctx context.Context, userID pgtype.UUID) (Subscription, error) {
-	row := q.db.QueryRow(ctx, selectActiveSubscription, userID)
-	var i Subscription
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.PlanID,
-		&i.PaymentID,
-		&i.StartDate,
-		&i.EndDate,
-	)
-	return i, err
-}
-
 const selectPayments = `-- name: SelectPayments :many
 SELECT id, user_id, invoice_id, amount_paid, status, created_at FROM payment WHERE user_id = $1
 `
@@ -326,12 +310,12 @@ func (q *Queries) SelectPayments(ctx context.Context, userID pgtype.UUID) ([]Pay
 	return items, nil
 }
 
-const selectPlanById = `-- name: SelectPlanById :one
+const selectPlan = `-- name: SelectPlan :one
 SELECT id, type, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) SelectPlanById(ctx context.Context, id pgtype.UUID) (Plan, error) {
-	row := q.db.QueryRow(ctx, selectPlanById, id)
+func (q *Queries) SelectPlan(ctx context.Context, id pgtype.UUID) (Plan, error) {
+	row := q.db.QueryRow(ctx, selectPlan, id)
 	var i Plan
 	err := row.Scan(
 		&i.ID,
@@ -417,42 +401,12 @@ func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshT
 	return i, err
 }
 
-const selectTasksByUserId = `-- name: SelectTasksByUserId :many
-SELECT id, user_id, name, description, checked FROM task WHERE user_id = $1
+const selectUser = `-- name: SelectUser :one
+SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1
 `
 
-func (q *Queries) SelectTasksByUserId(ctx context.Context, userID pgtype.UUID) ([]Task, error) {
-	rows, err := q.db.Query(ctx, selectTasksByUserId, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Task
-	for rows.Next() {
-		var i Task
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Name,
-			&i.Description,
-			&i.Checked,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const selectUserByEmail = `-- name: SelectUserByEmail :one
-SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE email = $1
-`
-
-func (q *Queries) SelectUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, selectUserByEmail, email)
+func (q *Queries) SelectUser(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, selectUser, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -467,12 +421,30 @@ func (q *Queries) SelectUserByEmail(ctx context.Context, email string) (User, er
 	return i, err
 }
 
-const selectUserById = `-- name: SelectUserById :one
-SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1
+const selectUserActiveSubscription = `-- name: SelectUserActiveSubscription :one
+SELECT id, user_id, plan_id, payment_id, start_date, end_date FROM subscription WHERE user_id = $1 AND end_date > NOW()
 `
 
-func (q *Queries) SelectUserById(ctx context.Context, id pgtype.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, selectUserById, id)
+func (q *Queries) SelectUserActiveSubscription(ctx context.Context, userID pgtype.UUID) (Subscription, error) {
+	row := q.db.QueryRow(ctx, selectUserActiveSubscription, userID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.PaymentID,
+		&i.StartDate,
+		&i.EndDate,
+	)
+	return i, err
+}
+
+const selectUserByEmail = `-- name: SelectUserByEmail :one
+SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE email = $1
+`
+
+func (q *Queries) SelectUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, selectUserByEmail, email)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -553,38 +525,37 @@ func (q *Queries) SelectUserPrayers(ctx context.Context, arg SelectUserPrayersPa
 	return items, nil
 }
 
-const updateTaskById = `-- name: UpdateTaskById :one
-UPDATE task SET name = $3, description = $4, checked = $5 WHERE id = $1 AND user_id = $2 RETURNING id, user_id, name, description, checked
+const selectUserTasks = `-- name: SelectUserTasks :many
+SELECT id, user_id, name, description, checked FROM task WHERE user_id = $1
 `
 
-type UpdateTaskByIdParams struct {
-	ID          pgtype.UUID `json:"id"`
-	UserID      pgtype.UUID `json:"user_id"`
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Checked     bool        `json:"checked"`
+func (q *Queries) SelectUserTasks(ctx context.Context, userID pgtype.UUID) ([]Task, error) {
+	rows, err := q.db.Query(ctx, selectUserTasks, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Description,
+			&i.Checked,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-func (q *Queries) UpdateTaskById(ctx context.Context, arg UpdateTaskByIdParams) (Task, error) {
-	row := q.db.QueryRow(ctx, updateTaskById,
-		arg.ID,
-		arg.UserID,
-		arg.Name,
-		arg.Description,
-		arg.Checked,
-	)
-	var i Task
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Name,
-		&i.Description,
-		&i.Checked,
-	)
-	return i, err
-}
-
-const updateUserById = `-- name: UpdateUserById :one
+const updateUser = `-- name: UpdateUser :one
 UPDATE "user"
 SET
   email = COALESCE($2, email),
@@ -596,7 +567,7 @@ SET
 WHERE id = $1 RETURNING id, email, password, name, coordinates, city, timezone, created_at
 `
 
-type UpdateUserByIdParams struct {
+type UpdateUserParams struct {
 	ID          pgtype.UUID  `json:"id"`
 	Email       pgtype.Text  `json:"email"`
 	Password    pgtype.Text  `json:"password"`
@@ -606,8 +577,8 @@ type UpdateUserByIdParams struct {
 	Timezone    pgtype.Text  `json:"timezone"`
 }
 
-func (q *Queries) UpdateUserById(ctx context.Context, arg UpdateUserByIdParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserById,
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
 		arg.ID,
 		arg.Email,
 		arg.Password,
@@ -653,6 +624,42 @@ func (q *Queries) UpdateUserPrayer(ctx context.Context, arg UpdateUserPrayerPara
 		&i.Year,
 		&i.Month,
 		&i.Day,
+	)
+	return i, err
+}
+
+const updateUserTask = `-- name: UpdateUserTask :one
+UPDATE task
+SET
+  name = COALESCE($3, name),
+  description = COALESCE($4, description),
+  checked = COALESCE($5, checked)
+WHERE id = $1 AND user_id = $2 RETURNING id, user_id, name, description, checked
+`
+
+type UpdateUserTaskParams struct {
+	ID          pgtype.UUID `json:"id"`
+	UserID      pgtype.UUID `json:"user_id"`
+	Name        pgtype.Text `json:"name"`
+	Description pgtype.Text `json:"description"`
+	Checked     pgtype.Bool `json:"checked"`
+}
+
+func (q *Queries) UpdateUserTask(ctx context.Context, arg UpdateUserTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, updateUserTask,
+		arg.ID,
+		arg.UserID,
+		arg.Name,
+		arg.Description,
+		arg.Checked,
+	)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Description,
+		&i.Checked,
 	)
 	return i, err
 }

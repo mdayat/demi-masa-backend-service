@@ -42,11 +42,11 @@ func (s subscription) GetActiveSubscription(res http.ResponseWriter, req *http.R
 			return repository.Subscription{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return s.configs.Db.Queries.SelectActiveSubscription(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
+		return s.configs.Db.Queries.SelectUserActiveSubscription(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select active subscription")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user active subscription")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
