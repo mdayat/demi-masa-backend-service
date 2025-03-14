@@ -50,14 +50,12 @@ CREATE TABLE coupon (
 
 CREATE TABLE plan (
   id UUID PRIMARY KEY,
-  type VARCHAR(255) NOT NULL CHECK (name IN ('premium')),
+  type VARCHAR(255) NOT NULL CHECK (type IN ('premium')),
   name VARCHAR(255) NOT NULL,
   price INT NOT NULL,
   duration_in_months SMALLINT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  deleted_at TIMESTAMPTZ NULL,
-
-  UNIQUE (name, duration_in_months)
+  deleted_at TIMESTAMPTZ NULL
 );
 
 CREATE TABLE invoice (

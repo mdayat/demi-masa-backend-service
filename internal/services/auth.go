@@ -2,17 +2,15 @@ package services
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 
 	"time"
 
+	"github.com/alexedwards/argon2id"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"golang.org/x/crypto/argon2"
 
 	"github.com/mdayat/demi-masa-backend-service/configs"
 	"github.com/mdayat/demi-masa-backend-service/internal/dbutil"
@@ -319,33 +317,6 @@ func (a auth) createInsertPrayersParams(userUUID pgtype.UUID) []repository.Inser
 	return insertPrayersParams
 }
 
-func (a auth) hashPassword(password string) (string, error) {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("failed to generate salt: %w", err)
-	}
-
-	var iterations uint32 = 3
-	var memory uint32 = 64 * 1024
-	var parallelism uint8 = 4
-	var keyLength uint32 = 32
-
-	hash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
-	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
-	encodedHash := base64.RawStdEncoding.EncodeToString(hash)
-
-	finalHash := fmt.Sprintf(
-		"$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
-		memory,
-		iterations,
-		parallelism,
-		encodedSalt,
-		encodedHash,
-	)
-
-	return finalHash, nil
-}
-
 type RegisterUserParams struct {
 	UserUUID  pgtype.UUID
 	Username  string
@@ -360,7 +331,7 @@ type registerUserResult struct {
 }
 
 func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registerUserResult, error) {
-	hashedPassword, err := a.hashPassword(arg.Password)
+	hashedPassword, err := argon2id.CreateHash(arg.Password, argon2id.DefaultParams)
 	if err != nil {
 		return registerUserResult{}, fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -459,20 +430,21 @@ type authenticateUserResult struct {
 }
 
 func (a auth) AuthenticateUser(ctx context.Context, arg AuthenticateUserParams) (authenticateUserResult, error) {
-	hashedPassword, err := a.hashPassword(arg.Password)
-	if err != nil {
-		return authenticateUserResult{}, fmt.Errorf("failed to hash password: %w", err)
-	}
-
 	user, err := retryutil.RetryWithData(func() (repository.User, error) {
-		return a.configs.Db.Queries.SelectUserByEmailAndPassword(ctx, repository.SelectUserByEmailAndPasswordParams{
-			Email:    arg.Email,
-			Password: hashedPassword,
-		})
+		return a.configs.Db.Queries.SelectUserByEmail(ctx, arg.Email)
 	})
 
 	if err != nil {
-		return authenticateUserResult{}, fmt.Errorf("failed to select user by email and password: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to select user by email: %w", err)
+	}
+
+	match, err := argon2id.ComparePasswordAndHash(arg.Password, user.Password)
+	if err != nil {
+		return authenticateUserResult{}, fmt.Errorf("failed to compare password: %w", err)
+	}
+
+	if !match {
+		return authenticateUserResult{}, errors.New("wrong password")
 	}
 
 	userId := user.ID.String()

@@ -243,14 +243,15 @@ func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	bearerToken := req.Header.Get("Authorization")
-	if bearerToken == "" || !strings.Contains(bearerToken, "Bearer") {
+	authHeader := req.Header.Get("Authorization")
+	splittedAuthHeader := strings.Split(authHeader, "Bearer ")
+	if authHeader == "" || len(splittedAuthHeader) != 2 {
 		logger.Error().Err(errors.New("invalid authorization header")).Caller().Int("status_code", http.StatusUnauthorized).Send()
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
-	claims, err := a.service.ValidateRefreshToken(strings.Split(bearerToken, "Bearer ")[1])
+	claims, err := a.service.ValidateRefreshToken(splittedAuthHeader[1])
 	if err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid refresh token")
 		http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)

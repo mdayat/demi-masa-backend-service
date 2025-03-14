@@ -4,8 +4,8 @@ INSERT INTO "user" (id, email, password, name, coordinates, city, timezone) VALU
 -- name: SelectUserById :one
 SELECT * FROM "user" WHERE id = $1;
 
--- name: SelectUserByEmailAndPassword :one
-SELECT * FROM "user" WHERE email = $1 AND password = $2;
+-- name: SelectUserByEmail :one
+SELECT * FROM "user" WHERE email = $1;
 
 -- name: SelectUserByInvoiceId :one
 SELECT u.* FROM invoice i JOIN "user" u ON i.user_id = u.id WHERE i.id = $1;

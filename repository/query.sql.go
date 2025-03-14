@@ -491,17 +491,12 @@ func (q *Queries) SelectTasksByUserId(ctx context.Context, userID pgtype.UUID) (
 	return items, nil
 }
 
-const selectUserByEmailAndPassword = `-- name: SelectUserByEmailAndPassword :one
-SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE email = $1 AND password = $2
+const selectUserByEmail = `-- name: SelectUserByEmail :one
+SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE email = $1
 `
 
-type SelectUserByEmailAndPasswordParams struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-func (q *Queries) SelectUserByEmailAndPassword(ctx context.Context, arg SelectUserByEmailAndPasswordParams) (User, error) {
-	row := q.db.QueryRow(ctx, selectUserByEmailAndPassword, arg.Email, arg.Password)
+func (q *Queries) SelectUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, selectUserByEmail, email)
 	var i User
 	err := row.Scan(
 		&i.ID,
