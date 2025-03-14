@@ -92,12 +92,14 @@ func (u user) DeleteUser(res http.ResponseWriter, req *http.Request) {
 	logger := log.Ctx(ctx).With().Logger()
 
 	userId := chi.URLParam(req, "userId")
-	err := retryutil.RetryWithoutData(func() error {
-		userUUID, err := uuid.Parse(userId)
-		if err != nil {
-			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
-		}
+	userUUID, err := uuid.Parse(userId)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("user not found")
+		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
 
+	err = retryutil.RetryWithoutData(func() error {
 		return u.configs.Db.Queries.DeleteUserById(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
@@ -124,6 +126,14 @@ func (u user) UpdateUser(res http.ResponseWriter, req *http.Request) {
 	if err := httputil.DecodeAndValidate(req, u.configs.Validate, &reqBody); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	userId := chi.URLParam(req, "userId")
+	userUUID, err := uuid.Parse(userId)
+	if err != nil {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("user not found")
+		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
 
@@ -163,13 +173,7 @@ func (u user) UpdateUser(res http.ResponseWriter, req *http.Request) {
 		timezone = pgtype.Text{String: result.Timezone, Valid: true}
 	}
 
-	userId := chi.URLParam(req, "userId")
 	user, err := retryutil.RetryWithData(func() (repository.User, error) {
-		userUUID, err := uuid.Parse(userId)
-		if err != nil {
-			return repository.User{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
-		}
-
 		var coordinates pgtype.Point
 		if reqBody.Latitude != "" && reqBody.Longitude != "" {
 			latitude, longitude, err := u.service.ParseStringCoordinates(reqBody.Latitude, reqBody.Longitude)
