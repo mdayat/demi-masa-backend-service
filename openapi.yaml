@@ -1,0 +1,679 @@
+openapi: 3.1.0
+info:
+  title: Demi Masa API Specs
+  version: 1.0.0-oas3.1
+tags:
+  - name: Auth
+  - name: User
+  - name: Subscription
+  - name: Prayer
+  - name: Plan
+  - name: Task
+  - name: Payment
+servers:
+  - url: "https://api.demi-masa.id"
+    description: Production server
+  - url: "http://localhost:8080"
+    description: Local development
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid request body
+        "409":
+          description: User already exists
+        "500":
+          description: Internal server error
+      security: []
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login a user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid request body
+        "404":
+          description: User not found
+        "500":
+          description: Internal server error
+      security: []
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout a user
+      responses:
+        "200":
+          description: Logout successful
+        "401":
+          description: Invalid refresh token
+        "500":
+          description: Internal server error
+      security:
+        - refreshToken: []
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh tokens
+      responses:
+        "201":
+          description: Refresh successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "401":
+          description: Invalid refresh token
+        "500":
+          description: Internal server error
+      security:
+        - refreshToken: []
+  /users/me:
+    get:
+      tags:
+        - User
+      summary: Get current user
+      responses:
+        "200":
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "404":
+          description: User not found
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+    put:
+      tags:
+        - User
+      summary: Update current user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRequest"
+      responses:
+        "200":
+          description: Update successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "204":
+          description: No update performed
+        "400":
+          description: Invalid request body
+        "404":
+          description: User not found
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+    delete:
+      tags:
+        - User
+      summary: Delete current user
+      responses:
+        "204":
+          description: Delete successful
+        "404":
+          description: User not found
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /subscriptions/active:
+    get:
+      tags:
+        - Subscription
+      summary: Get active subscription
+      responses:
+        "200":
+          description: Active subscription found
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/SubscriptionResponse"
+                  - type: "null"
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /prayers:
+    get:
+      tags:
+        - Prayer
+      summary: Get prayers
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+          examples:
+            default:
+              value: 2024
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+          examples:
+            default:
+              value: 12
+        - name: day
+          in: query
+          schema:
+            type: integer
+          examples:
+            default:
+              value: 31
+      responses:
+        "200":
+          description: Prayers found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PrayerResponse"
+        "400":
+          description: Invalid query params
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  "/prayers/{prayerId}":
+    put:
+      tags:
+        - Prayer
+      summary: Update prayer status
+      parameters:
+        - name: prayerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrayerRequest"
+      responses:
+        "200":
+          description: Update successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrayerResponse"
+        "204":
+          description: No update performed
+        "400":
+          description: Invalid request body
+        "404":
+          description: Prayer not found
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /plans:
+    get:
+      tags:
+        - Plan
+      summary: Get all plans
+      responses:
+        "200":
+          description: Plans found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlanResponse"
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  "/plans/{planId}":
+    get:
+      tags:
+        - Plan
+      summary: Get plan by ID
+      parameters:
+        - name: planId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plan found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanResponse"
+        "404":
+          description: Plan not found
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /tasks:
+    get:
+      tags:
+        - Task
+      summary: Get all tasks
+      responses:
+        "200":
+          description: Tasks found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskResponse"
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+    post:
+      tags:
+        - Task
+      summary: Create a task
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+      responses:
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          description: Invalid request body
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  "/tasks/{taskId}":
+    put:
+      tags:
+        - Task
+      summary: Update a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskRequest"
+      responses:
+        "200":
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "204":
+          description: No update performed
+        "400":
+          description: Invalid request body
+        "404":
+          description: Task not found
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+    delete:
+      tags:
+        - Task
+      summary: Delete a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Task deleted
+        "404":
+          description: Task not found
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /invoices/active:
+    get:
+      tags:
+        - Payment
+      summary: Get active invoice
+      responses:
+        "200":
+          description: Active invoice found
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/InvoiceResponse"
+                  - type: "null"
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /invoices:
+    post:
+      tags:
+        - Payment
+      summary: Create an invoice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceRequest"
+      responses:
+        "201":
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        "400":
+          description: Invalid request body
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /payments:
+    get:
+      tags:
+        - Payment
+      summary: Get all payments
+      responses:
+        "200":
+          description: Payments found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoiceResponse"
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+components:
+  securitySchemes:
+    accessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+    AuthResponse:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+        access_token:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserResponse"
+    RefreshResponse:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+        access_token:
+          type: string
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        city:
+          type: string
+        timezone:
+          type: string
+        created_at:
+          type: string
+    UserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        latitude:
+          type: string
+        longitude:
+          type: string
+    SubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        plan_id:
+          type: string
+        payment_id:
+          type: string
+        start_date:
+          type: string
+        end_date:
+          type: string
+    PrayerResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        year:
+          type: integer
+          format: int16
+        month:
+          type: integer
+          format: int16
+        day:
+          type: integer
+          format: int16
+    PrayerRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - on_time
+            - late
+            - missed
+    PlanResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        price:
+          type: integer
+          format: int32
+        duration_in_months:
+          type: integer
+          format: int16
+        created_at:
+          type: string
+    TaskResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        checked:
+          type: boolean
+    CreateTaskRequest:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    UpdateTaskRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        checked:
+          type: boolean
+    InvoiceResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        plan_id:
+          type: string
+        ref_id:
+          type: string
+        coupon_code:
+          type: string
+        total_amount:
+          type: integer
+          format: int32
+        qr_url:
+          type: string
+        expires_at:
+          type: string
+        created_at:
+          type: string
+    CreateInvoiceRequest:
+      type: object
+      required:
+        - customer_name
+        - customer_email
+        - plan
+      properties:
+        coupon_code:
+          type: string
+        customer_name:
+          type: string
+        customer_email:
+          type: string
+          format: email
+        plan:
+          type: object
+          required:
+            - id
+            - type
+            - name
+            - price
+            - duration_in_months
+          properties:
+            id:
+              type: string
+              format: uuid
+            type:
+              type: string
+            name:
+              type: string
+            price:
+              type: integer
+            duration_in_months:
+              type: integer
+security:
+  - accessToken: []
