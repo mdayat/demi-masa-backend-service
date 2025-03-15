@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/dtos"
 	"github.com/mdayat/demi-masa-backend-service/internal/httputil"
 	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 	"github.com/mdayat/demi-masa-backend-service/internal/services"
@@ -39,27 +40,11 @@ func NewAuthHandler(configs configs.Configs, service services.AuthServicer) Auth
 	}
 }
 
-type userResponse struct {
-	Id        string  `json:"id"`
-	Email     string  `json:"email"`
-	Name      string  `json:"name"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	City      string  `json:"city"`
-	Timezone  string  `json:"timezone"`
-	CreatedAt string  `json:"created_at"`
-}
-
 func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	var reqBody struct {
-		Username string `json:"username" validate:"required"`
-		Email    string `json:"email" validate:"required,email"`
-		Password string `json:"password" validate:"required"`
-	}
-
+	var reqBody dtos.RegisterRequest
 	if err := httputil.DecodeAndValidate(req, a.configs.Validate, &reqBody); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -86,14 +71,10 @@ func (a auth) Register(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resBody := struct {
-		RefreshToken string       `json:"refresh_token"`
-		AccessToken  string       `json:"access_token"`
-		User         userResponse `json:"user"`
-	}{
+	resBody := dtos.AuthResponse{
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
-		User: userResponse{
+		User: dtos.UserResponse{
 			Id:        result.User.ID.String(),
 			Email:     result.User.Email,
 			Name:      result.User.Name,
@@ -124,11 +105,7 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	var reqBody struct {
-		Email    string `json:"email" validate:"required,email"`
-		Password string `json:"password" validate:"required"`
-	}
-
+	var reqBody dtos.LoginRequest
 	if err := httputil.DecodeAndValidate(req, a.configs.Validate, &reqBody); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -151,14 +128,10 @@ func (a auth) Login(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resBody := struct {
-		RefreshToken string       `json:"refresh_token"`
-		AccessToken  string       `json:"access_token"`
-		User         userResponse `json:"user"`
-	}{
+	resBody := dtos.AuthResponse{
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
-		User: userResponse{
+		User: dtos.UserResponse{
 			Id:        result.User.ID.String(),
 			Email:     result.User.Email,
 			Name:      result.User.Name,
@@ -203,25 +176,25 @@ func (a auth) Logout(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = retryutil.RetryWithoutData(func() error {
+	_, err = retryutil.RetryWithData(func() (repository.RefreshToken, error) {
 		refreshTokenUUID, err := uuid.Parse(claims.ID)
 		if err != nil {
-			return fmt.Errorf("failed to parse JTI to UUID: %w", err)
+			return repository.RefreshToken{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
 		}
 
 		userUUID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
+			return repository.RefreshToken{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return a.configs.Db.Queries.RevokeRefreshToken(ctx, repository.RevokeRefreshTokenParams{
+		return a.configs.Db.Queries.RevokeUserRefreshToken(ctx, repository.RevokeUserRefreshTokenParams{
 			ID:     pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
 			UserID: pgtype.UUID{Bytes: userUUID, Valid: true},
 		})
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to revoke refresh token")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to revoke user refresh token")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -259,14 +232,14 @@ func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
 			return repository.RefreshToken{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return a.configs.Db.Queries.SelectRefreshTokenById(ctx, repository.SelectRefreshTokenByIdParams{
+		return a.configs.Db.Queries.SelectUserRefreshToken(ctx, repository.SelectUserRefreshTokenParams{
 			ID:     pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
 			UserID: pgtype.UUID{Bytes: userUUID, Valid: true},
 		})
 	})
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select refresh token")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user refresh token")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -289,10 +262,7 @@ func (a auth) Refresh(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resBody := struct {
-		RefreshToken string `json:"refresh_token"`
-		AccessToken  string `json:"access_token"`
-	}{
+	resBody := dtos.RefreshResponse{
 		RefreshToken: result.RefreshToken,
 		AccessToken:  result.AccessToken,
 	}

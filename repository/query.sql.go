@@ -56,30 +56,6 @@ func (q *Queries) IncrementCouponQuota(ctx context.Context, code string) error {
 	return err
 }
 
-type InsertPrayersParams struct {
-	ID     pgtype.UUID `json:"id"`
-	UserID pgtype.UUID `json:"user_id"`
-	Name   string      `json:"name"`
-	Year   int16       `json:"year"`
-	Month  int16       `json:"month"`
-	Day    int16       `json:"day"`
-}
-
-const insertRefreshToken = `-- name: InsertRefreshToken :exec
-INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3)
-`
-
-type InsertRefreshTokenParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, insertRefreshToken, arg.ID, arg.UserID, arg.ExpiresAt)
-	return err
-}
-
 const insertUser = `-- name: InsertUser :one
 INSERT INTO "user" (id, email, password, name, coordinates, city, timezone)
 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, password, name, coordinates, city, timezone, created_at
@@ -194,6 +170,38 @@ func (q *Queries) InsertUserPayment(ctx context.Context, arg InsertUserPaymentPa
 	return i, err
 }
 
+type InsertUserPrayersParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+	Name   string      `json:"name"`
+	Year   int16       `json:"year"`
+	Month  int16       `json:"month"`
+	Day    int16       `json:"day"`
+}
+
+const insertUserRefreshToken = `-- name: InsertUserRefreshToken :one
+INSERT INTO refresh_token (id, user_id, expires_at)
+VALUES ($1, $2, $3) RETURNING id, user_id, revoked, expires_at
+`
+
+type InsertUserRefreshTokenParams struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertUserRefreshToken(ctx context.Context, arg InsertUserRefreshTokenParams) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, insertUserRefreshToken, arg.ID, arg.UserID, arg.ExpiresAt)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Revoked,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const insertUserSubscription = `-- name: InsertUserSubscription :one
 INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date)
 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, user_id, plan_id, payment_id, start_date, end_date
@@ -259,18 +267,26 @@ func (q *Queries) InsertUserTask(ctx context.Context, arg InsertUserTaskParams) 
 	return i, err
 }
 
-const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
-UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2
+const revokeUserRefreshToken = `-- name: RevokeUserRefreshToken :one
+UPDATE refresh_token SET revoked = TRUE
+WHERE id = $1 AND user_id = $2 RETURNING id, user_id, revoked, expires_at
 `
 
-type RevokeRefreshTokenParams struct {
+type RevokeUserRefreshTokenParams struct {
 	ID     pgtype.UUID `json:"id"`
 	UserID pgtype.UUID `json:"user_id"`
 }
 
-func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, revokeRefreshToken, arg.ID, arg.UserID)
-	return err
+func (q *Queries) RevokeUserRefreshToken(ctx context.Context, arg RevokeUserRefreshTokenParams) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, revokeUserRefreshToken, arg.ID, arg.UserID)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Revoked,
+		&i.ExpiresAt,
+	)
+	return i, err
 }
 
 const selectPlan = `-- name: SelectPlan :one
@@ -341,27 +357,6 @@ func (q *Queries) SelectPlans(ctx context.Context) ([]Plan, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const selectRefreshTokenById = `-- name: SelectRefreshTokenById :one
-SELECT id, user_id, revoked, expires_at FROM refresh_token WHERE id = $1 AND user_id = $2
-`
-
-type SelectRefreshTokenByIdParams struct {
-	ID     pgtype.UUID `json:"id"`
-	UserID pgtype.UUID `json:"user_id"`
-}
-
-func (q *Queries) SelectRefreshTokenById(ctx context.Context, arg SelectRefreshTokenByIdParams) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, selectRefreshTokenById, arg.ID, arg.UserID)
-	var i RefreshToken
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Revoked,
-		&i.ExpiresAt,
-	)
-	return i, err
 }
 
 const selectUser = `-- name: SelectUser :one
@@ -544,6 +539,27 @@ func (q *Queries) SelectUserPrayers(ctx context.Context, arg SelectUserPrayersPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const selectUserRefreshToken = `-- name: SelectUserRefreshToken :one
+SELECT id, user_id, revoked, expires_at FROM refresh_token WHERE id = $1 AND user_id = $2
+`
+
+type SelectUserRefreshTokenParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) SelectUserRefreshToken(ctx context.Context, arg SelectUserRefreshTokenParams) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, selectUserRefreshToken, arg.ID, arg.UserID)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Revoked,
+		&i.ExpiresAt,
+	)
+	return i, err
 }
 
 const selectUserTasks = `-- name: SelectUserTasks :many

@@ -9,13 +9,13 @@ import (
 	"context"
 )
 
-// iteratorForInsertPrayers implements pgx.CopyFromSource.
-type iteratorForInsertPrayers struct {
-	rows                 []InsertPrayersParams
+// iteratorForInsertUserPrayers implements pgx.CopyFromSource.
+type iteratorForInsertUserPrayers struct {
+	rows                 []InsertUserPrayersParams
 	skippedFirstNextCall bool
 }
 
-func (r *iteratorForInsertPrayers) Next() bool {
+func (r *iteratorForInsertUserPrayers) Next() bool {
 	if len(r.rows) == 0 {
 		return false
 	}
@@ -27,7 +27,7 @@ func (r *iteratorForInsertPrayers) Next() bool {
 	return len(r.rows) > 0
 }
 
-func (r iteratorForInsertPrayers) Values() ([]interface{}, error) {
+func (r iteratorForInsertUserPrayers) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].ID,
 		r.rows[0].UserID,
@@ -38,10 +38,10 @@ func (r iteratorForInsertPrayers) Values() ([]interface{}, error) {
 	}, nil
 }
 
-func (r iteratorForInsertPrayers) Err() error {
+func (r iteratorForInsertUserPrayers) Err() error {
 	return nil
 }
 
-func (q *Queries) InsertPrayers(ctx context.Context, arg []InsertPrayersParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"prayer"}, []string{"id", "user_id", "name", "year", "month", "day"}, &iteratorForInsertPrayers{rows: arg})
+func (q *Queries) InsertUserPrayers(ctx context.Context, arg []InsertUserPrayersParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"prayer"}, []string{"id", "user_id", "name", "year", "month", "day"}, &iteratorForInsertUserPrayers{rows: arg})
 }

@@ -126,7 +126,7 @@ func (u user) UpdateUser(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if reqBody.Email == "" && reqBody.Password == "" && reqBody.Name == "" && reqBody.Latitude == "" && reqBody.Longitude == "" {
+	if reqBody.Email == "" && reqBody.Password == "" && reqBody.Username == "" && reqBody.Latitude == "" && reqBody.Longitude == "" {
 		res.WriteHeader(http.StatusNoContent)
 		logger.Info().Int("status_code", http.StatusNoContent).Msg("no update performed")
 		return
@@ -143,8 +143,8 @@ func (u user) UpdateUser(res http.ResponseWriter, req *http.Request) {
 	}
 
 	var name pgtype.Text
-	if reqBody.Name != "" {
-		name = pgtype.Text{String: reqBody.Name, Valid: true}
+	if reqBody.Username != "" {
+		name = pgtype.Text{String: reqBody.Username, Valid: true}
 	}
 
 	var city pgtype.Text

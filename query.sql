@@ -32,16 +32,18 @@ VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 -- name: SelectUserActiveSubscription :one
 SELECT * FROM subscription WHERE user_id = $1 AND end_date > NOW();
 
--- name: InsertRefreshToken :exec
-INSERT INTO refresh_token (id, user_id, expires_at) VALUES ($1, $2, $3);
+-- name: InsertUserRefreshToken :one
+INSERT INTO refresh_token (id, user_id, expires_at)
+VALUES ($1, $2, $3) RETURNING *;
 
--- name: SelectRefreshTokenById :one
+-- name: SelectUserRefreshToken :one
 SELECT * FROM refresh_token WHERE id = $1 AND user_id = $2;
 
--- name: RevokeRefreshToken :exec
-UPDATE refresh_token SET revoked = TRUE WHERE id = $1 AND user_id = $2;
+-- name: RevokeUserRefreshToken :one
+UPDATE refresh_token SET revoked = TRUE
+WHERE id = $1 AND user_id = $2 RETURNING *;
 
--- name: InsertPrayers :copyfrom
+-- name: InsertUserPrayers :copyfrom
 INSERT INTO prayer (id, user_id, name, year, month, day)
 VALUES ($1, $2, $3, $4, $5, $6);
 

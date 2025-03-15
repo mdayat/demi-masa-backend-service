@@ -197,13 +197,13 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 			return rotateRefreshTokenResult{}, fmt.Errorf("failed to parse old JTI to UUID: %w", err)
 		}
 
-		err = qtx.RevokeRefreshToken(ctx, repository.RevokeRefreshTokenParams{
+		_, err = qtx.RevokeUserRefreshToken(ctx, repository.RevokeUserRefreshTokenParams{
 			ID:     pgtype.UUID{Bytes: oldRefreshTokenId, Valid: true},
 			UserID: arg.UserUUID,
 		})
 
 		if err != nil {
-			return rotateRefreshTokenResult{}, fmt.Errorf("failed to revoke refresh token: %w", err)
+			return rotateRefreshTokenResult{}, fmt.Errorf("failed to revoke user refresh token: %w", err)
 		}
 
 		userId := arg.UserUUID.String()
@@ -246,14 +246,14 @@ func (a auth) RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenPara
 			return rotateRefreshTokenResult{}, fmt.Errorf("failed to parse new JTI to UUID: %w", err)
 		}
 
-		err = qtx.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
+		_, err = qtx.InsertUserRefreshToken(ctx, repository.InsertUserRefreshTokenParams{
 			ID:        pgtype.UUID{Bytes: newRefreshTokenId, Valid: true},
 			UserID:    arg.UserUUID,
 			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
 		})
 
 		if err != nil {
-			return rotateRefreshTokenResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+			return rotateRefreshTokenResult{}, fmt.Errorf("failed to insert user refresh token: %w", err)
 		}
 
 		rotateRefreshTokenResult := rotateRefreshTokenResult{
@@ -277,7 +277,7 @@ const (
 	isya   prayerName = "isya"
 )
 
-func (a auth) createInsertPrayersParams(userUUID pgtype.UUID) []repository.InsertPrayersParams {
+func (a auth) createInsertPrayersParams(userUUID pgtype.UUID) []repository.InsertUserPrayersParams {
 	now := time.Now()
 	firstDayOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	nextMonth := firstDayOfThisMonth.AddDate(0, 1, 0)
@@ -285,7 +285,7 @@ func (a auth) createInsertPrayersParams(userUUID pgtype.UUID) []repository.Inser
 	numOfDaysOfThisMonth := lastDayOfThisMonth.Day()
 
 	numOfPrayersDaily := 5
-	insertPrayersParams := make([]repository.InsertPrayersParams, 0, numOfDaysOfThisMonth*numOfPrayersDaily)
+	insertPrayersParams := make([]repository.InsertUserPrayersParams, 0, numOfDaysOfThisMonth*numOfPrayersDaily)
 
 	var prayerName prayerName
 	for day := now.Day(); day <= numOfDaysOfThisMonth; day++ {
@@ -303,7 +303,7 @@ func (a auth) createInsertPrayersParams(userUUID pgtype.UUID) []repository.Inser
 				prayerName = isya
 			}
 
-			insertPrayersParams = append(insertPrayersParams, repository.InsertPrayersParams{
+			insertPrayersParams = append(insertPrayersParams, repository.InsertUserPrayersParams{
 				ID:     pgtype.UUID{Bytes: uuid.New(), Valid: true},
 				UserID: userUUID,
 				Name:   string(prayerName),
@@ -352,9 +352,9 @@ func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registe
 		}
 
 		insertPrayersParams := a.createInsertPrayersParams(user.ID)
-		_, err = qtx.InsertPrayers(ctx, insertPrayersParams)
+		_, err = qtx.InsertUserPrayers(ctx, insertPrayersParams)
 		if err != nil {
-			return registerUserResult{}, fmt.Errorf("failed to insert prayers: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to insert user prayers: %w", err)
 		}
 
 		userId := user.ID.String()
@@ -396,14 +396,14 @@ func (a auth) RegisterUser(ctx context.Context, arg RegisterUserParams) (registe
 			return registerUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
 		}
 
-		err = qtx.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
+		_, err = qtx.InsertUserRefreshToken(ctx, repository.InsertUserRefreshTokenParams{
 			ID:        pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
 			UserID:    user.ID,
 			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
 		})
 
 		if err != nil {
-			return registerUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+			return registerUserResult{}, fmt.Errorf("failed to insert user refresh token: %w", err)
 		}
 
 		registerUserResult := registerUserResult{
@@ -486,8 +486,8 @@ func (a auth) AuthenticateUser(ctx context.Context, arg AuthenticateUserParams) 
 		return authenticateUserResult{}, fmt.Errorf("failed to parse JTI to UUID: %w", err)
 	}
 
-	err = retryutil.RetryWithoutData(func() error {
-		return a.configs.Db.Queries.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
+	_, err = retryutil.RetryWithData(func() (repository.RefreshToken, error) {
+		return a.configs.Db.Queries.InsertUserRefreshToken(ctx, repository.InsertUserRefreshTokenParams{
 			ID:        pgtype.UUID{Bytes: refreshTokenUUID, Valid: true},
 			UserID:    user.ID,
 			ExpiresAt: pgtype.Timestamptz{Time: refreshTokenClaims.ExpiresAt.Time, Valid: true},
@@ -495,7 +495,7 @@ func (a auth) AuthenticateUser(ctx context.Context, arg AuthenticateUserParams) 
 	})
 
 	if err != nil {
-		return authenticateUserResult{}, fmt.Errorf("failed to insert refresh token: %w", err)
+		return authenticateUserResult{}, fmt.Errorf("failed to insert user refresh token: %w", err)
 	}
 
 	authenticateUserResult := authenticateUserResult{

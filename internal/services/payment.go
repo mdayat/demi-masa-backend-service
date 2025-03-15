@@ -176,7 +176,7 @@ func (p payment) ProcessSuccessfulPayment(ctx context.Context, arg ProcessSucces
 		})
 
 		if err != nil {
-			return fmt.Errorf("failed to insert payment: %w", err)
+			return fmt.Errorf("failed to insert user payment: %w", err)
 		}
 
 		plan, err := qtx.SelectPlanByInvoiceId(ctx, pgtype.UUID{Bytes: invoiceUUID, Valid: true})
@@ -197,7 +197,7 @@ func (p payment) ProcessSuccessfulPayment(ctx context.Context, arg ProcessSucces
 		})
 
 		if err != nil {
-			return fmt.Errorf("failed to insert subscription: %w", err)
+			return fmt.Errorf("failed to insert user subscription: %w", err)
 		}
 
 		return nil

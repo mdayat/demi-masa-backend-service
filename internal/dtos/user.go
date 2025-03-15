@@ -3,7 +3,7 @@ package dtos
 type UserRequest struct {
 	Email     string `json:"email" validate:"omitempty,email"`
 	Password  string `json:"password" validate:"omitempty,min=8"`
-	Name      string `json:"name" validate:"omitempty,min=2"`
+	Username  string `json:"username" validate:"omitempty,min=2"`
 	Latitude  string `json:"latitude" validate:"omitempty,latitude"`
 	Longitude string `json:"longitude" validate:"omitempty,longitude"`
 }
