@@ -194,8 +194,13 @@ func (a auth) Logout(res http.ResponseWriter, req *http.Request) {
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to revoke user refresh token")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusUnauthorized).Msg("invalid refresh token")
+			http.Error(res, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		} else {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to revoke user refresh token")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		return
 	}
 
