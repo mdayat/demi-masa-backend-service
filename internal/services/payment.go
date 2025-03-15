@@ -19,13 +19,14 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/mdayat/demi-masa-backend-service/configs"
 	"github.com/mdayat/demi-masa-backend-service/internal/dbutil"
+	"github.com/mdayat/demi-masa-backend-service/internal/dtos"
 	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 	"github.com/mdayat/demi-masa-backend-service/repository"
 )
 
 type PaymentServicer interface {
-	CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTxRequest
-	RequestTripayTx(ctx context.Context, tripayTxRequest tripayTxRequest) (tripayTxResponse, error)
+	CreateTripayTxRequest(arg CreateTripayTxRequestParams) dtos.TripayTransactionRequest
+	RequestTripayTx(ctx context.Context, tripayTxRequest dtos.TripayTransactionRequest) (dtos.TripayTransactionResponse, error)
 	ValidateCallbackSignature(tripaySignature string, reqBody []byte) error
 	ProcessSuccessfulPayment(ctx context.Context, arg ProcessSuccessfulPaymentParams) error
 	ProcessUnsuccessfulPayment(ctx context.Context, arg ProcessUnsuccessfulPaymentParams) error
@@ -53,31 +54,6 @@ func (p payment) createRequestSignature(merchantRef string, amount int) string {
 
 var QRISPaymentChannel = "QRIS"
 
-type orderItem struct {
-	Id       string `json:"id"`
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Price    int    `json:"price"`
-	Quantity int    `json:"quantity"`
-}
-
-type tripayTxRequest struct {
-	Method        string      `json:"method"`
-	MerchantRef   string      `json:"merchant_ref"`
-	Amount        int         `json:"amount"`
-	CustomerName  string      `json:"customer_name"`
-	CustomerEmail string      `json:"customer_email"`
-	OrderItems    []orderItem `json:"order_items"`
-	Signature     string      `json:"signature"`
-}
-
-type tripayTxResponse struct {
-	Reference   string `json:"reference"`
-	Amount      int    `json:"amount"`
-	ExpiredTime int    `json:"expired_time"`
-	QrURL       string `json:"qr_url"`
-}
-
 type CreateTripayTxRequestParams struct {
 	MerchantRef   string
 	CustomerName  string
@@ -89,9 +65,9 @@ type CreateTripayTxRequestParams struct {
 	PlanPrice     int
 }
 
-func (p payment) CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTxRequest {
+func (p payment) CreateTripayTxRequest(arg CreateTripayTxRequestParams) dtos.TripayTransactionRequest {
 	signature := p.createRequestSignature(arg.MerchantRef, arg.TotalAmount)
-	orderItems := []orderItem{
+	orderItems := []dtos.TripayOrderItem{
 		{
 			Id:       arg.PlanId,
 			Type:     arg.PlanType,
@@ -101,7 +77,7 @@ func (p payment) CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTx
 		},
 	}
 
-	return tripayTxRequest{
+	return dtos.TripayTransactionRequest{
 		Method:        QRISPaymentChannel,
 		MerchantRef:   arg.MerchantRef,
 		Amount:        arg.TotalAmount,
@@ -112,25 +88,25 @@ func (p payment) CreateTripayTxRequest(arg CreateTripayTxRequestParams) tripayTx
 	}
 }
 
-func (p payment) RequestTripayTx(ctx context.Context, tripayTxRequest tripayTxRequest) (tripayTxResponse, error) {
+func (p payment) RequestTripayTx(ctx context.Context, tripayTxRequest dtos.TripayTransactionRequest) (dtos.TripayTransactionResponse, error) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(tripayTxRequest); err != nil {
-		return tripayTxResponse{}, fmt.Errorf("failed to encode tripay tx request to json: %w", err)
+		return dtos.TripayTransactionResponse{}, fmt.Errorf("failed to encode tripay tx request to json: %w", err)
 	}
 
 	tripayURL := "https://tripay.co.id/api-sandbox/transaction/create"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tripayURL, &buf)
 	if err != nil {
-		return tripayTxResponse{}, fmt.Errorf("failed to new http post request with context: %w", err)
+		return dtos.TripayTransactionResponse{}, fmt.Errorf("failed to new http post request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", p.configs.Env.TripayAPIKey))
 
-	retryableFunc := func() (tripayTxResponse, error) {
+	retryableFunc := func() (dtos.TripayTransactionResponse, error) {
 		res, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return tripayTxResponse{}, fmt.Errorf("failed to send http post request: %w", err)
+			return dtos.TripayTransactionResponse{}, fmt.Errorf("failed to send http post request: %w", err)
 		}
 		defer res.Body.Close()
 
@@ -141,16 +117,16 @@ func (p payment) RequestTripayTx(ctx context.Context, tripayTxRequest tripayTxRe
 		}
 
 		if err = json.NewDecoder(res.Body).Decode(&resBody); err != nil {
-			return tripayTxResponse{}, fmt.Errorf("failed to decode tripay tx response: %w", err)
+			return dtos.TripayTransactionResponse{}, fmt.Errorf("failed to decode tripay tx response: %w", err)
 		}
 
 		if !resBody.Success {
-			return tripayTxResponse{}, errors.New(resBody.Message)
+			return dtos.TripayTransactionResponse{}, errors.New(resBody.Message)
 		}
 
-		var data tripayTxResponse
+		var data dtos.TripayTransactionResponse
 		if err = json.Unmarshal(resBody.Data, &data); err != nil {
-			return tripayTxResponse{}, fmt.Errorf("failed to unmarshal successful tripay tx request: %w", err)
+			return dtos.TripayTransactionResponse{}, fmt.Errorf("failed to unmarshal successful tripay tx request: %w", err)
 		}
 
 		return data, nil
@@ -191,7 +167,7 @@ func (p payment) ProcessSuccessfulPayment(ctx context.Context, arg ProcessSucces
 	}
 
 	retryableFunc := func(qtx *repository.Queries) error {
-		err = qtx.InsertPayment(ctx, repository.InsertPaymentParams{
+		_, err = qtx.InsertUserPayment(ctx, repository.InsertUserPaymentParams{
 			ID:         pgtype.UUID{Bytes: paymentUUID, Valid: true},
 			UserID:     arg.UserId,
 			InvoiceID:  pgtype.UUID{Bytes: invoiceUUID, Valid: true},
@@ -211,7 +187,7 @@ func (p payment) ProcessSuccessfulPayment(ctx context.Context, arg ProcessSucces
 		startDate := time.Now()
 		endDate := startDate.AddDate(0, int(plan.DurationInMonths), 0)
 
-		err = qtx.InsertSubscription(ctx, repository.InsertSubscriptionParams{
+		_, err = qtx.InsertUserSubscription(ctx, repository.InsertUserSubscriptionParams{
 			ID:        pgtype.UUID{Bytes: subscriptionUUID, Valid: true},
 			UserID:    arg.UserId,
 			PlanID:    plan.ID,
@@ -244,8 +220,8 @@ func (p payment) ProcessUnsuccessfulPayment(ctx context.Context, arg ProcessUnsu
 		return fmt.Errorf("failed to parse invoice Id to UUID: %w", err)
 	}
 
-	return retryutil.RetryWithoutData(func() error {
-		return p.configs.Db.Queries.InsertPayment(ctx, repository.InsertPaymentParams{
+	_, err = retryutil.RetryWithData(func() (repository.Payment, error) {
+		return p.configs.Db.Queries.InsertUserPayment(ctx, repository.InsertUserPaymentParams{
 			ID:         pgtype.UUID{Bytes: paymentUUID, Valid: true},
 			UserID:     arg.UserId,
 			InvoiceID:  pgtype.UUID{Bytes: invoiceUUID, Valid: true},
@@ -253,4 +229,6 @@ func (p payment) ProcessUnsuccessfulPayment(ctx context.Context, arg ProcessUnsu
 			Status:     strings.ToLower(arg.Status),
 		})
 	})
+
+	return err
 }

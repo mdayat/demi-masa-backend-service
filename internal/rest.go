@@ -62,7 +62,7 @@ func (r rest) Start() error {
 	r.router.Post("/payments/callback", paymentHandler.TripayCallback)
 
 	r.router.Group(func(router chi.Router) {
-		// router.Use(customMiddleware.Authenticate)
+		router.Use(customMiddleware.Authenticate)
 
 		userService := services.NewUserService(r.configs)
 		userHandler := handlers.NewUserHandler(r.configs, userService)

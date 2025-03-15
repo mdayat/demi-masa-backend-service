@@ -56,70 +56,6 @@ func (q *Queries) IncrementCouponQuota(ctx context.Context, code string) error {
 	return err
 }
 
-const insertInvoice = `-- name: InsertInvoice :one
-INSERT INTO invoice (id, user_id, plan_id, ref_id, coupon_code, total_amount, qr_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, user_id, plan_id, ref_id, coupon_code, total_amount, qr_url, expires_at, created_at
-`
-
-type InsertInvoiceParams struct {
-	ID          pgtype.UUID        `json:"id"`
-	UserID      pgtype.UUID        `json:"user_id"`
-	PlanID      pgtype.UUID        `json:"plan_id"`
-	RefID       string             `json:"ref_id"`
-	CouponCode  pgtype.Text        `json:"coupon_code"`
-	TotalAmount int32              `json:"total_amount"`
-	QrUrl       string             `json:"qr_url"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) (Invoice, error) {
-	row := q.db.QueryRow(ctx, insertInvoice,
-		arg.ID,
-		arg.UserID,
-		arg.PlanID,
-		arg.RefID,
-		arg.CouponCode,
-		arg.TotalAmount,
-		arg.QrUrl,
-		arg.ExpiresAt,
-	)
-	var i Invoice
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.PlanID,
-		&i.RefID,
-		&i.CouponCode,
-		&i.TotalAmount,
-		&i.QrUrl,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const insertPayment = `-- name: InsertPayment :exec
-INSERT INTO payment (id, user_id, invoice_id, amount_paid, status) VALUES ($1, $2, $3, $4, $5)
-`
-
-type InsertPaymentParams struct {
-	ID         pgtype.UUID `json:"id"`
-	UserID     pgtype.UUID `json:"user_id"`
-	InvoiceID  pgtype.UUID `json:"invoice_id"`
-	AmountPaid int32       `json:"amount_paid"`
-	Status     string      `json:"status"`
-}
-
-func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) error {
-	_, err := q.db.Exec(ctx, insertPayment,
-		arg.ID,
-		arg.UserID,
-		arg.InvoiceID,
-		arg.AmountPaid,
-		arg.Status,
-	)
-	return err
-}
-
 type InsertPrayersParams struct {
 	ID     pgtype.UUID `json:"id"`
 	UserID pgtype.UUID `json:"user_id"`
@@ -141,31 +77,6 @@ type InsertRefreshTokenParams struct {
 
 func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) error {
 	_, err := q.db.Exec(ctx, insertRefreshToken, arg.ID, arg.UserID, arg.ExpiresAt)
-	return err
-}
-
-const insertSubscription = `-- name: InsertSubscription :exec
-INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date) VALUES ($1, $2, $3, $4, $5, $6)
-`
-
-type InsertSubscriptionParams struct {
-	ID        pgtype.UUID        `json:"id"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	PlanID    pgtype.UUID        `json:"plan_id"`
-	PaymentID pgtype.UUID        `json:"payment_id"`
-	StartDate pgtype.Timestamptz `json:"start_date"`
-	EndDate   pgtype.Timestamptz `json:"end_date"`
-}
-
-func (q *Queries) InsertSubscription(ctx context.Context, arg InsertSubscriptionParams) error {
-	_, err := q.db.Exec(ctx, insertSubscription,
-		arg.ID,
-		arg.UserID,
-		arg.PlanID,
-		arg.PaymentID,
-		arg.StartDate,
-		arg.EndDate,
-	)
 	return err
 }
 
@@ -204,6 +115,116 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		&i.City,
 		&i.Timezone,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertUserInvoice = `-- name: InsertUserInvoice :one
+INSERT INTO invoice (id, user_id, plan_id, ref_id, coupon_code, total_amount, qr_url, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, user_id, plan_id, ref_id, coupon_code, total_amount, qr_url, expires_at, created_at
+`
+
+type InsertUserInvoiceParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	PlanID      pgtype.UUID        `json:"plan_id"`
+	RefID       string             `json:"ref_id"`
+	CouponCode  pgtype.Text        `json:"coupon_code"`
+	TotalAmount int32              `json:"total_amount"`
+	QrUrl       string             `json:"qr_url"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertUserInvoice(ctx context.Context, arg InsertUserInvoiceParams) (Invoice, error) {
+	row := q.db.QueryRow(ctx, insertUserInvoice,
+		arg.ID,
+		arg.UserID,
+		arg.PlanID,
+		arg.RefID,
+		arg.CouponCode,
+		arg.TotalAmount,
+		arg.QrUrl,
+		arg.ExpiresAt,
+	)
+	var i Invoice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.RefID,
+		&i.CouponCode,
+		&i.TotalAmount,
+		&i.QrUrl,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertUserPayment = `-- name: InsertUserPayment :one
+INSERT INTO payment (id, user_id, invoice_id, amount_paid, status)
+VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, invoice_id, amount_paid, status, created_at
+`
+
+type InsertUserPaymentParams struct {
+	ID         pgtype.UUID `json:"id"`
+	UserID     pgtype.UUID `json:"user_id"`
+	InvoiceID  pgtype.UUID `json:"invoice_id"`
+	AmountPaid int32       `json:"amount_paid"`
+	Status     string      `json:"status"`
+}
+
+func (q *Queries) InsertUserPayment(ctx context.Context, arg InsertUserPaymentParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, insertUserPayment,
+		arg.ID,
+		arg.UserID,
+		arg.InvoiceID,
+		arg.AmountPaid,
+		arg.Status,
+	)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.InvoiceID,
+		&i.AmountPaid,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertUserSubscription = `-- name: InsertUserSubscription :one
+INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, user_id, plan_id, payment_id, start_date, end_date
+`
+
+type InsertUserSubscriptionParams struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	PlanID    pgtype.UUID        `json:"plan_id"`
+	PaymentID pgtype.UUID        `json:"payment_id"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
+}
+
+func (q *Queries) InsertUserSubscription(ctx context.Context, arg InsertUserSubscriptionParams) (Subscription, error) {
+	row := q.db.QueryRow(ctx, insertUserSubscription,
+		arg.ID,
+		arg.UserID,
+		arg.PlanID,
+		arg.PaymentID,
+		arg.StartDate,
+		arg.EndDate,
+	)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.PaymentID,
+		&i.StartDate,
+		&i.EndDate,
 	)
 	return i, err
 }
@@ -250,64 +271,6 @@ type RevokeRefreshTokenParams struct {
 func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshTokenParams) error {
 	_, err := q.db.Exec(ctx, revokeRefreshToken, arg.ID, arg.UserID)
 	return err
-}
-
-const selectActiveInvoice = `-- name: SelectActiveInvoice :one
-SELECT i.id, i.user_id, i.plan_id, i.ref_id, i.coupon_code, i.total_amount, i.qr_url, i.expires_at, i.created_at FROM invoice i
-WHERE i.user_id = $1 AND i.expires_at > NOW()
-AND NOT EXISTS (
-    SELECT 1 
-    FROM payment p 
-    WHERE p.invoice_id = i.id
-)
-`
-
-func (q *Queries) SelectActiveInvoice(ctx context.Context, userID pgtype.UUID) (Invoice, error) {
-	row := q.db.QueryRow(ctx, selectActiveInvoice, userID)
-	var i Invoice
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.PlanID,
-		&i.RefID,
-		&i.CouponCode,
-		&i.TotalAmount,
-		&i.QrUrl,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const selectPayments = `-- name: SelectPayments :many
-SELECT id, user_id, invoice_id, amount_paid, status, created_at FROM payment WHERE user_id = $1
-`
-
-func (q *Queries) SelectPayments(ctx context.Context, userID pgtype.UUID) ([]Payment, error) {
-	rows, err := q.db.Query(ctx, selectPayments, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Payment
-	for rows.Next() {
-		var i Payment
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.InvoiceID,
-			&i.AmountPaid,
-			&i.Status,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const selectPlan = `-- name: SelectPlan :one
@@ -421,6 +384,33 @@ func (q *Queries) SelectUser(ctx context.Context, id pgtype.UUID) (User, error) 
 	return i, err
 }
 
+const selectUserActiveInvoice = `-- name: SelectUserActiveInvoice :one
+SELECT i.id, i.user_id, i.plan_id, i.ref_id, i.coupon_code, i.total_amount, i.qr_url, i.expires_at, i.created_at FROM invoice i
+WHERE i.user_id = $1 AND i.expires_at > NOW()
+AND NOT EXISTS (
+    SELECT 1 
+    FROM payment p 
+    WHERE p.invoice_id = i.id
+)
+`
+
+func (q *Queries) SelectUserActiveInvoice(ctx context.Context, userID pgtype.UUID) (Invoice, error) {
+	row := q.db.QueryRow(ctx, selectUserActiveInvoice, userID)
+	var i Invoice
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.RefID,
+		&i.CouponCode,
+		&i.TotalAmount,
+		&i.QrUrl,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const selectUserActiveSubscription = `-- name: SelectUserActiveSubscription :one
 SELECT id, user_id, plan_id, payment_id, start_date, end_date FROM subscription WHERE user_id = $1 AND end_date > NOW()
 `
@@ -477,6 +467,37 @@ func (q *Queries) SelectUserByInvoiceId(ctx context.Context, id pgtype.UUID) (Us
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const selectUserPayments = `-- name: SelectUserPayments :many
+SELECT id, user_id, invoice_id, amount_paid, status, created_at FROM payment WHERE user_id = $1
+`
+
+func (q *Queries) SelectUserPayments(ctx context.Context, userID pgtype.UUID) ([]Payment, error) {
+	rows, err := q.db.Query(ctx, selectUserPayments, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Payment
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.InvoiceID,
+			&i.AmountPaid,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const selectUserPrayers = `-- name: SelectUserPrayers :many

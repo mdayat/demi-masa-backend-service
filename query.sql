@@ -25,8 +25,9 @@ WHERE id = $1 RETURNING *;
 -- name: DeleteUser :exec
 DELETE FROM "user" WHERE id = $1;
 
--- name: InsertSubscription :exec
-INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date) VALUES ($1, $2, $3, $4, $5, $6);
+-- name: InsertUserSubscription :one
+INSERT INTO subscription (id, user_id, plan_id, payment_id, start_date, end_date)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 
 -- name: SelectUserActiveSubscription :one
 SELECT * FROM subscription WHERE user_id = $1 AND end_date > NOW();
@@ -54,10 +55,11 @@ UPDATE prayer
 SET status = COALESCE(sqlc.narg(status), status)
 WHERE id = $1 AND user_id = $2 RETURNING *;
 
--- name: InsertInvoice :one
-INSERT INTO invoice (id, user_id, plan_id, ref_id, coupon_code, total_amount, qr_url, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
+-- name: InsertUserInvoice :one
+INSERT INTO invoice (id, user_id, plan_id, ref_id, coupon_code, total_amount, qr_url, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
 
--- name: SelectActiveInvoice :one
+-- name: SelectUserActiveInvoice :one
 SELECT i.* FROM invoice i
 WHERE i.user_id = $1 AND i.expires_at > NOW()
 AND NOT EXISTS (
@@ -73,10 +75,11 @@ WHERE code = $1 AND quota > 0 AND deleted_at IS NULL;
 -- name: IncrementCouponQuota :exec
 UPDATE coupon SET quota = quota + 1 WHERE code = $1;
 
--- name: InsertPayment :exec
-INSERT INTO payment (id, user_id, invoice_id, amount_paid, status) VALUES ($1, $2, $3, $4, $5);
+-- name: InsertUserPayment :one
+INSERT INTO payment (id, user_id, invoice_id, amount_paid, status)
+VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
--- name: SelectPayments :many
+-- name: SelectUserPayments :many
 SELECT * FROM payment WHERE user_id = $1;
 
 -- name: SelectPlanByInvoiceId :one

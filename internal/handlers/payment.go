@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mdayat/demi-masa-backend-service/configs"
+	"github.com/mdayat/demi-masa-backend-service/internal/dtos"
 	"github.com/mdayat/demi-masa-backend-service/internal/httputil"
 	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 	"github.com/mdayat/demi-masa-backend-service/internal/services"
@@ -40,17 +41,6 @@ func NewPaymentHandler(configs configs.Configs, service services.PaymentServicer
 	}
 }
 
-type invoiceResponse struct {
-	Id          string `json:"id"`
-	PlanId      string `json:"plan_id"`
-	RefId       string `json:"ref_id"`
-	CouponCode  string `json:"coupon_code"`
-	TotalAmount int32  `json:"total_amount"`
-	QrUrl       string `json:"qr_url"`
-	ExpiresAt   string `json:"expires_at"`
-	CreatedAt   string `json:"created_at"`
-}
-
 func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
@@ -62,18 +52,18 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 			return repository.Invoice{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return p.configs.Db.Queries.SelectActiveInvoice(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
+		return p.configs.Db.Queries.SelectUserActiveInvoice(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select active invoice")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user active invoice")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
 	params := httputil.SendSuccessResponseParams{StatusCode: http.StatusOK}
 	if err == nil {
-		resBody := invoiceResponse{
+		resBody := dtos.InvoiceResponse{
 			Id:          invoice.ID.String(),
 			PlanId:      invoice.PlanID.String(),
 			RefId:       invoice.RefID,
@@ -96,24 +86,11 @@ func (p payment) GetActiveInvoice(res http.ResponseWriter, req *http.Request) {
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully got active invoice")
 }
 
-type createInvoiceRequest struct {
-	CouponCode    string `json:"coupon_code"`
-	CustomerName  string `json:"customer_name" validate:"required"`
-	CustomerEmail string `json:"customer_email" validate:"required,email"`
-	Plan          struct {
-		Id               string `json:"id" validate:"required,uuid"`
-		Type             string `json:"type" validate:"required"`
-		Name             string `json:"name" validate:"required"`
-		Price            int    `json:"price" validate:"required"`
-		DurationInMonths int    `json:"duration_in_months" validate:"required"`
-	} `json:"plan"`
-}
-
 func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
 
-	var reqBody createInvoiceRequest
+	var reqBody dtos.CreateInvoiceRequest
 	if err := httputil.DecodeAndValidate(req, p.configs.Validate, &reqBody); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusBadRequest).Msg("invalid request body")
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -200,7 +177,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 			return repository.Invoice{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return p.configs.Db.Queries.InsertInvoice(ctx, repository.InsertInvoiceParams{
+		return p.configs.Db.Queries.InsertUserInvoice(ctx, repository.InsertUserInvoiceParams{
 			ID:          pgtype.UUID{Bytes: merchantRef, Valid: true},
 			UserID:      pgtype.UUID{Bytes: userUUID, Valid: true},
 			PlanID:      pgtype.UUID{Bytes: planUUID, Valid: true},
@@ -218,12 +195,12 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 			shouldRollbackCoupon = true
 		}
 
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to insert invoice")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to insert user invoice")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
-	resBody := invoiceResponse{
+	resBody := dtos.InvoiceResponse{
 		Id:          merchantRefString,
 		PlanId:      invoice.PlanID.String(),
 		RefId:       invoice.RefID,
@@ -268,13 +245,7 @@ func (p payment) TripayCallback(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var body struct {
-		Reference   string `json:"reference"`
-		MerchantRef string `json:"merchant_ref"`
-		TotalAmount int    `json:"total_amount"`
-		Status      string `json:"status"`
-	}
-
+	var body dtos.TripayCallbackRequest
 	if err := json.Unmarshal(bytes, &body); err != nil {
 		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to unmarshal tripay callback request")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -291,8 +262,13 @@ func (p payment) TripayCallback(res http.ResponseWriter, req *http.Request) {
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user by invoice Id")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("user not found")
+			http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		} else {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user by invoice Id")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -344,14 +320,6 @@ func (p payment) TripayCallback(res http.ResponseWriter, req *http.Request) {
 	logger.Info().Int("status_code", http.StatusOK).Msg("successfully processed tripay callback request")
 }
 
-type getPaymentsResponse struct {
-	Id         string `json:"id"`
-	InvoiceId  string `json:"invoice_id"`
-	AmountPaid int32  `json:"amount_paid"`
-	Status     string `json:"status"`
-	CreatedAt  string `json:"created_at"`
-}
-
 func (p payment) GetPayments(res http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	logger := log.Ctx(ctx).With().Logger()
@@ -363,18 +331,18 @@ func (p payment) GetPayments(res http.ResponseWriter, req *http.Request) {
 			return []repository.Payment{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
-		return p.configs.Db.Queries.SelectPayments(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
+		return p.configs.Db.Queries.SelectUserPayments(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select payments")
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to select user payments")
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
-	resBody := make([]getPaymentsResponse, 0, len(payments))
+	resBody := make([]dtos.PaymentResponse, 0, len(payments))
 	for _, payment := range payments {
-		resBody = append(resBody, getPaymentsResponse{
+		resBody = append(resBody, dtos.PaymentResponse{
 			Id:         payment.ID.String(),
 			InvoiceId:  payment.InvoiceID.String(),
 			AmountPaid: payment.AmountPaid,
