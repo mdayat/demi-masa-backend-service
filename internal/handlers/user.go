@@ -191,8 +191,13 @@ func (u user) UpdateUser(res http.ResponseWriter, req *http.Request) {
 	})
 
 	if err != nil {
-		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update user")
-		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if errors.Is(err, pgx.ErrNoRows) {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("user not found")
+			http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		} else {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to update user")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		return
 	}
 
