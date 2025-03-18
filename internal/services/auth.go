@@ -10,6 +10,7 @@ import (
 	"github.com/alexedwards/argon2id"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/mdayat/demi-masa-backend-service/configs"
@@ -444,7 +445,7 @@ func (a auth) AuthenticateUser(ctx context.Context, arg AuthenticateUserParams) 
 	}
 
 	if !match {
-		return authenticateUserResult{}, errors.New("wrong password")
+		return authenticateUserResult{}, fmt.Errorf("wrong password: %w", pgx.ErrNoRows)
 	}
 
 	userId := user.ID.String()
