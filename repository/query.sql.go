@@ -289,6 +289,23 @@ func (q *Queries) RevokeUserRefreshToken(ctx context.Context, arg RevokeUserRefr
 	return i, err
 }
 
+const selectCoupon = `-- name: SelectCoupon :one
+SELECT code, influencer_username, quota, created_at, deleted_at FROM coupon WHERE code = $1
+`
+
+func (q *Queries) SelectCoupon(ctx context.Context, code string) (Coupon, error) {
+	row := q.db.QueryRow(ctx, selectCoupon, code)
+	var i Coupon
+	err := row.Scan(
+		&i.Code,
+		&i.InfluencerUsername,
+		&i.Quota,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const selectPlan = `-- name: SelectPlan :one
 SELECT id, type, name, price, duration_in_months, created_at, deleted_at FROM plan WHERE id = $1 AND deleted_at IS NULL
 `

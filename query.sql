@@ -70,6 +70,9 @@ AND NOT EXISTS (
     WHERE p.invoice_id = i.id
 );
 
+-- name: SelectCoupon :one
+SELECT * FROM coupon WHERE code = $1;
+
 -- name: DecrementCouponQuota :execrows
 UPDATE coupon SET quota = quota - 1
 WHERE code = $1 AND quota > 0 AND deleted_at IS NULL;

@@ -91,6 +91,9 @@ func (r rest) Start() error {
 		router.Post("/tasks", taskHandler.CreateTask)
 		router.Put("/tasks/{taskId}", taskHandler.UpdateTask)
 		router.Delete("/tasks/{taskId}", taskHandler.DeleteTask)
+
+		couponHandler := handlers.NewCouponHandler(r.configs)
+		router.Get("/coupons/{couponCode}", couponHandler.GetCoupon)
 	})
 
 	if err := http.ListenAndServe(":8080", r.router); err != nil {
