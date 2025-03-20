@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/avast/retry-go/v4"
 	"github.com/mdayat/demi-masa-backend-service/configs"
 	"github.com/mdayat/demi-masa-backend-service/internal/dbutil"
 	"github.com/mdayat/demi-masa-backend-service/internal/dtos"
@@ -94,7 +93,7 @@ func (p payment) RequestTripayTx(ctx context.Context, tripayTxRequest dtos.Tripa
 		return dtos.TripayTransactionResponse{}, fmt.Errorf("failed to encode tripay tx request to json: %w", err)
 	}
 
-	tripayURL := "https://tripay.co.id/api-sandbox/transaction/create"
+	tripayURL := "https://tripay.co.id/api/transaction/create"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tripayURL, &buf)
 	if err != nil {
 		return dtos.TripayTransactionResponse{}, fmt.Errorf("failed to new http post request with context: %w", err)
@@ -132,7 +131,7 @@ func (p payment) RequestTripayTx(ctx context.Context, tripayTxRequest dtos.Tripa
 		return data, nil
 	}
 
-	return retry.DoWithData(retryableFunc, retry.Attempts(3), retry.LastErrorOnly(true))
+	return retryutil.RetryWithData(retryableFunc)
 }
 
 func (p payment) createCallbackSignature(bytes []byte) string {
