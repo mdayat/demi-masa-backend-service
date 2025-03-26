@@ -10,10 +10,11 @@ tags:
   - name: Plan
   - name: Task
   - name: Payment
+  - name: Coupon
 servers:
-  - url: "https://api.demi-masa.id"
+  - url: https://api.demi-masa.id
     description: Production server
-  - url: "http://localhost:8080"
+  - url: http://localhost:8080
     description: Local development
 paths:
   /auth/register:
@@ -215,7 +216,7 @@ paths:
           description: Internal server error
       security:
         - accessToken: []
-  "/prayers/{prayerId}":
+  /prayers/{prayerId}:
     put:
       tags:
         - Prayer
@@ -266,7 +267,7 @@ paths:
           description: Internal server error
       security:
         - accessToken: []
-  "/plans/{planId}":
+  /plans/{planId}:
     get:
       tags:
         - Plan
@@ -330,7 +331,7 @@ paths:
           description: Internal server error
       security:
         - accessToken: []
-  "/tasks/{taskId}":
+  /tasks/{taskId}:
     put:
       tags:
         - Task
@@ -436,7 +437,31 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/InvoiceResponse"
+                  $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+      security:
+        - accessToken: []
+  /coupons/{couponCode}:
+    get:
+      tags:
+        - Coupon
+      summary: Get coupon
+      parameters:
+        - name: couponCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Coupon found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CouponResponse"
+        "404":
+          description: Coupon not found
         "500":
           description: Internal server error
       security:
@@ -555,6 +580,11 @@ components:
           type: string
         status:
           type: string
+          enum:
+            - pending
+            - on_time
+            - late
+            - missed
         year:
           type: integer
           format: int16
@@ -581,6 +611,8 @@ components:
           type: string
         type:
           type: string
+          enum:
+            - premium
         name:
           type: string
         price:
@@ -669,11 +701,44 @@ components:
               format: uuid
             type:
               type: string
+              enum:
+                - premium
             name:
               type: string
             price:
               type: integer
             duration_in_months:
               type: integer
+    PaymentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        invoice_id:
+          type: string
+        amount_paid:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+            - paid
+            - expired
+            - failed
+            - refund
+        created_at:
+          type: string
+    CouponResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        influencer_username:
+          type: string
+        quota:
+          type: integer
+          format: int16
+        created_at:
+          type: string
 security:
   - accessToken: []
