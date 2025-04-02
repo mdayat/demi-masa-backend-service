@@ -9,7 +9,6 @@ import (
 type Env struct {
 	DatabaseURL        string
 	AllowedOrigins     string
-	ClientId           string
 	SecretKey          string
 	OriginURL          string
 	TripayMerchantCode string
@@ -26,7 +25,6 @@ func LoadEnv() (Env, error) {
 	env := Env{
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
 		AllowedOrigins:     os.Getenv("ALLOWED_ORIGINS"),
-		ClientId:           os.Getenv("CLIENT_ID"),
 		SecretKey:          os.Getenv("SECRET_KEY"),
 		OriginURL:          os.Getenv("ORIGIN_URL"),
 		TripayMerchantCode: os.Getenv("TRIPAY_MERCHANT_CODE"),

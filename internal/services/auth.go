@@ -17,11 +17,9 @@ import (
 	"github.com/mdayat/demi-masa-backend-service/internal/dbutil"
 	"github.com/mdayat/demi-masa-backend-service/internal/retryutil"
 	"github.com/mdayat/demi-masa-backend-service/repository"
-	"google.golang.org/api/idtoken"
 )
 
 type AuthServicer interface {
-	ValidateIDToken(ctx context.Context, idToken string) (validateIDTokenResult, error)
 	CreateRefreshToken(claims RefreshTokenClaims) (string, error)
 	ValidateRefreshToken(tokenString string) (*RefreshTokenClaims, error)
 	CreateAccessToken(claims AccessTokenClaims) (string, error)
@@ -39,52 +37,6 @@ func NewAuthService(configs configs.Configs) AuthServicer {
 	return &auth{
 		configs: configs,
 	}
-}
-
-type validateIDTokenResult struct {
-	Subject string
-	Email   string
-	Name    string
-}
-
-func (a auth) ValidateIDToken(ctx context.Context, idToken string) (validateIDTokenResult, error) {
-	validator, err := idtoken.NewValidator(ctx)
-	if err != nil {
-		return validateIDTokenResult{}, err
-	}
-
-	payload, err := validator.Validate(ctx, idToken, a.configs.Env.ClientId)
-	if err != nil {
-		return validateIDTokenResult{}, fmt.Errorf("failed to validate Id token: %w", err)
-	}
-
-	emailRaw, exists := payload.Claims["email"]
-	if !exists {
-		return validateIDTokenResult{}, errors.New("email claim is missing")
-	}
-
-	email, ok := emailRaw.(string)
-	if !ok {
-		return validateIDTokenResult{}, errors.New("email claim is not a string")
-	}
-
-	nameRaw, exists := payload.Claims["name"]
-	if !exists {
-		return validateIDTokenResult{}, errors.New("name claim is missing")
-	}
-
-	name, ok := nameRaw.(string)
-	if !ok {
-		return validateIDTokenResult{}, errors.New("name claim is not a string")
-	}
-
-	validateIDTokenResult := validateIDTokenResult{
-		Subject: payload.Subject,
-		Email:   email,
-		Name:    name,
-	}
-
-	return validateIDTokenResult, nil
 }
 
 type TokenType int
