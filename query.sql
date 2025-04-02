@@ -70,6 +70,10 @@ AND NOT EXISTS (
     WHERE p.invoice_id = i.id
 );
 
+-- name: InsertCoupon :one
+INSERT INTO coupon (code, influencer_username, quota)
+VALUES ($1, $2, $3) RETURNING *;
+
 -- name: SelectCoupon :one
 SELECT * FROM coupon WHERE code = $1;
 
@@ -86,6 +90,10 @@ VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
 -- name: SelectUserPayments :many
 SELECT * FROM payment WHERE user_id = $1;
+
+-- name: InsertPlan :one
+INSERT INTO plan (id, type, name, price, duration_in_months)
+VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
 -- name: SelectPlanByInvoiceId :one
 SELECT p.* FROM invoice i JOIN plan p ON i.plan_id = p.id WHERE i.id = $1;

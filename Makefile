@@ -1,3 +1,6 @@
+include .testing.env
+export
+
 .DEFAULT_GOAL := run
 
 .PHONY:fmt vet build run govulncheck staticcheck revive
@@ -11,10 +14,18 @@ vet: fmt
 	go vet ./...
 
 build: vet
-	go build -o app
+	go build -C cmd/web -o app
 
 run:
-	go run main.go
+	go run cmd/web/main.go
+
+seed:
+	docker run -d --name postgres -p 5432:5432 --env-file ./.testing.env postgres:15
+	@until docker exec postgres pg_isready -U postgres; do \
+		sleep 1; \
+	done
+	atlas migrate apply --env prod -u "$(DATABASE_URL)" --revisions-schema public
+	go run cmd/seed/main.go
 
 govulncheck:
 	govulncheck ./...

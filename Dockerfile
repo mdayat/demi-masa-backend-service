@@ -7,7 +7,7 @@ WORKDIR /app
 
 FROM base-go AS build
 COPY go.mod go.sum ./
-COPY main.go .
+COPY cmd/web/main.go .
 COPY configs/ ./configs/
 COPY internal/ ./internal/
 COPY repository/ ./repository/

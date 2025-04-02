@@ -56,6 +56,64 @@ func (q *Queries) IncrementCouponQuota(ctx context.Context, code string) error {
 	return err
 }
 
+const insertCoupon = `-- name: InsertCoupon :one
+INSERT INTO coupon (code, influencer_username, quota)
+VALUES ($1, $2, $3) RETURNING code, influencer_username, quota, created_at, deleted_at
+`
+
+type InsertCouponParams struct {
+	Code               string `json:"code"`
+	InfluencerUsername string `json:"influencer_username"`
+	Quota              int16  `json:"quota"`
+}
+
+func (q *Queries) InsertCoupon(ctx context.Context, arg InsertCouponParams) (Coupon, error) {
+	row := q.db.QueryRow(ctx, insertCoupon, arg.Code, arg.InfluencerUsername, arg.Quota)
+	var i Coupon
+	err := row.Scan(
+		&i.Code,
+		&i.InfluencerUsername,
+		&i.Quota,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const insertPlan = `-- name: InsertPlan :one
+INSERT INTO plan (id, type, name, price, duration_in_months)
+VALUES ($1, $2, $3, $4, $5) RETURNING id, type, name, price, duration_in_months, created_at, deleted_at
+`
+
+type InsertPlanParams struct {
+	ID               pgtype.UUID `json:"id"`
+	Type             string      `json:"type"`
+	Name             string      `json:"name"`
+	Price            int32       `json:"price"`
+	DurationInMonths int16       `json:"duration_in_months"`
+}
+
+func (q *Queries) InsertPlan(ctx context.Context, arg InsertPlanParams) (Plan, error) {
+	row := q.db.QueryRow(ctx, insertPlan,
+		arg.ID,
+		arg.Type,
+		arg.Name,
+		arg.Price,
+		arg.DurationInMonths,
+	)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.Type,
+		&i.Name,
+		&i.Price,
+		&i.DurationInMonths,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const insertUser = `-- name: InsertUser :one
 INSERT INTO "user" (id, email, password, name, coordinates, city, timezone)
 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, password, name, coordinates, city, timezone, created_at
