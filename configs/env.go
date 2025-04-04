@@ -17,8 +17,8 @@ type Env struct {
 	GeoapifyAPIKey     string
 }
 
-func LoadEnv() (Env, error) {
-	if err := godotenv.Load(); err != nil {
+func LoadEnv(filenames ...string) (Env, error) {
+	if err := godotenv.Load(filenames...); err != nil {
 		return Env{}, err
 	}
 

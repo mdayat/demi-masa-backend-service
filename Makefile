@@ -1,4 +1,5 @@
-include .testing.env
+# uncomment two lines of code below when running `run` command 
+include ./.test.env
 export
 
 .DEFAULT_GOAL := run
@@ -20,12 +21,15 @@ run:
 	go run cmd/web/main.go
 
 seed:
-	docker run -d --name postgres -p 5432:5432 --env-file ./.testing.env postgres:15
+	docker run -d --name postgres -p 5432:5432 --env-file ./.test.env postgres:15
 	@until docker exec postgres pg_isready -U postgres; do \
 		sleep 1; \
 	done
 	atlas migrate apply --env prod -u "$(DATABASE_URL)" --revisions-schema public
 	go run cmd/seed/main.go
+
+test: seed
+	go test ./internal/handlers -v
 
 govulncheck:
 	govulncheck ./...
