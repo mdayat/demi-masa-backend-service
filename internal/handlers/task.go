@@ -235,10 +235,10 @@ func (t task) DeleteTask(res http.ResponseWriter, req *http.Request) {
 	}
 
 	userId := ctx.Value(userIdKey{}).(string)
-	err = retryutil.RetryWithoutData(func() error {
+	affectedRows, err := retryutil.RetryWithData(func() (int64, error) {
 		userUUID, err := uuid.Parse(userId)
 		if err != nil {
-			return fmt.Errorf("failed to parse user Id to UUID: %w", err)
+			return 0, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
 		return t.configs.Db.Queries.DeleteUserTask(ctx, repository.DeleteUserTaskParams{
@@ -248,13 +248,14 @@ func (t task) DeleteTask(res http.ResponseWriter, req *http.Request) {
 	})
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("task not found")
-			http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		} else {
-			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to delete user task")
-			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to delete user task")
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	if affectedRows == 0 {
+		logger.Error().Err(err).Caller().Int("status_code", http.StatusNotFound).Msg("task not found")
+		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
 

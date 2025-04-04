@@ -7,7 +7,7 @@ type CreateTaskRequest struct {
 
 type UpdateTaskRequest struct {
 	Name        string `json:"name"`
-	Description string `json:"email"`
+	Description string `json:"description"`
 	Checked     *bool  `json:"checked"`
 }
 

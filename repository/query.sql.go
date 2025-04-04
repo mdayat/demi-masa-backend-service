@@ -33,7 +33,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
-const deleteUserTask = `-- name: DeleteUserTask :exec
+const deleteUserTask = `-- name: DeleteUserTask :execrows
 DELETE FROM task WHERE id = $1 AND user_id = $2
 `
 
@@ -42,9 +42,12 @@ type DeleteUserTaskParams struct {
 	UserID pgtype.UUID `json:"user_id"`
 }
 
-func (q *Queries) DeleteUserTask(ctx context.Context, arg DeleteUserTaskParams) error {
-	_, err := q.db.Exec(ctx, deleteUserTask, arg.ID, arg.UserID)
-	return err
+func (q *Queries) DeleteUserTask(ctx context.Context, arg DeleteUserTaskParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserTask, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const incrementCouponQuota = `-- name: IncrementCouponQuota :exec

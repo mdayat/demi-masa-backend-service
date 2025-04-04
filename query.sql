@@ -119,5 +119,5 @@ SET
   checked = COALESCE(sqlc.narg(checked), checked)
 WHERE id = $1 AND user_id = $2 RETURNING *;
 
--- name: DeleteUserTask :exec
+-- name: DeleteUserTask :execrows
 DELETE FROM task WHERE id = $1 AND user_id = $2;
