@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"path/filepath"
 	"strconv"
 
 	"github.com/mdayat/demi-masa-backend-service/configs"
-	"github.com/mdayat/demi-masa-backend-service/internal"
+	"github.com/mdayat/demi-masa-backend-service/internal/handlers"
+	"github.com/mdayat/demi-masa-backend-service/internal/services"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -29,13 +31,18 @@ func main() {
 		logger.Fatal().Err(err).Send()
 	}
 
-	rest := internal.NewRestService(configs.Configs{
+	configs := configs.Configs{
 		Env:      env,
 		Db:       db,
 		Validate: configs.NewValidate(),
-	})
+	}
 
-	if err := rest.Start(); err != nil {
+	authService := services.NewAuthService(configs)
+	authenticator := handlers.NewProdAuthenticator(authService)
+	customMiddleware := handlers.NewMiddlewareHandler(configs, authenticator)
+	rest := handlers.NewRestHandler(configs, customMiddleware)
+
+	if err := http.ListenAndServe(":8080", rest.Router); err != nil {
 		logger.Fatal().Err(err).Send()
 	}
 }
