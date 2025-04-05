@@ -26,6 +26,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Add secrets
+        run: |
+          echo "${{ secrets.TEST_ENV_FILE }}" > .test.env
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
