@@ -25,7 +25,7 @@ func main() {
 	}
 	logger := log.With().Caller().Logger()
 
-	env, err := configs.LoadEnv()
+	env, err := configs.LoadEnv(".test.env")
 	if err != nil {
 		logger.Fatal().Err(err).Send()
 	}
