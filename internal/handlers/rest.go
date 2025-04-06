@@ -12,11 +12,7 @@ import (
 	"github.com/mdayat/demi-masa-backend-service/internal/services"
 )
 
-type Rest struct {
-	Router *chi.Mux
-}
-
-func NewRestHandler(configs configs.Configs, customMiddleware MiddlewareHandler) Rest {
+func NewRestHandler(configs configs.Configs, customMiddleware MiddlewareHandler) *chi.Mux {
 	router := chi.NewRouter()
 
 	router.Use(chiMiddleware.CleanPath)
@@ -82,7 +78,5 @@ func NewRestHandler(configs configs.Configs, customMiddleware MiddlewareHandler)
 		r.Get("/coupons/{couponCode}", couponHandler.GetCoupon)
 	})
 
-	return Rest{
-		Router: router,
-	}
+	return router
 }

@@ -7,3 +7,11 @@ type Configs struct {
 	Db       Db
 	Validate *validator.Validate
 }
+
+func NewConfigs(env Env, db Db) Configs {
+	return Configs{
+		Env:      env,
+		Db:       db,
+		Validate: NewValidate(),
+	}
+}

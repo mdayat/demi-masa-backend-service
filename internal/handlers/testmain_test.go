@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/mdayat/demi-masa-backend-service/configs"
 	"github.com/rs/zerolog"
@@ -23,25 +22,19 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-
+	ctx := context.TODO()
 	db, err := configs.NewDb(ctx, env.DatabaseURL)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	configs := configs.Configs{
-		Env:      env,
-		Db:       db,
-		Validate: configs.NewValidate(),
-	}
-
+	configs := configs.NewConfigs(env, db)
 	authenticator := NewTestAuthenticator(configs)
-	customMiddleware := NewMiddlewareHandler(configs, authenticator)
-	rest := NewRestHandler(configs, customMiddleware)
 
-	testServer = httptest.NewServer(rest.Router)
+	customMiddleware := NewMiddlewareHandler(configs, authenticator)
+	router := NewRestHandler(configs, customMiddleware)
+
+	testServer = httptest.NewServer(router)
 	defer testServer.Close()
 	testClient = testServer.Client()
 

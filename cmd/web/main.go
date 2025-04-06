@@ -31,18 +31,13 @@ func main() {
 		logger.Fatal().Err(err).Send()
 	}
 
-	configs := configs.Configs{
-		Env:      env,
-		Db:       db,
-		Validate: configs.NewValidate(),
-	}
-
+	configs := configs.NewConfigs(env, db)
 	authService := services.NewAuthService(configs)
 	authenticator := handlers.NewProdAuthenticator(authService)
 	customMiddleware := handlers.NewMiddlewareHandler(configs, authenticator)
-	rest := handlers.NewRestHandler(configs, customMiddleware)
+	router := handlers.NewRestHandler(configs, customMiddleware)
 
-	if err := http.ListenAndServe(":8080", rest.Router); err != nil {
+	if err := http.ListenAndServe(":8080", router); err != nil {
 		logger.Fatal().Err(err).Send()
 	}
 }
