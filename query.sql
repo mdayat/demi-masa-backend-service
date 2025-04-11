@@ -3,7 +3,12 @@ INSERT INTO "user" (id, email, password, name, coordinates, city, timezone)
 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
 
 -- name: SelectUser :one
-SELECT * FROM "user" WHERE id = $1;
+SELECT 
+  u.*, 
+  to_jsonb(s) AS subscription
+FROM "user" u
+LEFT JOIN subscription s ON s.user_id = u.id
+WHERE u.id = $1;
 
 -- name: SelectUserByEmail :one
 SELECT * FROM "user" WHERE email = $1;

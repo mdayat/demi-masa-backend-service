@@ -438,12 +438,29 @@ func (q *Queries) SelectPlans(ctx context.Context) ([]Plan, error) {
 }
 
 const selectUser = `-- name: SelectUser :one
-SELECT id, email, password, name, coordinates, city, timezone, created_at FROM "user" WHERE id = $1
+SELECT 
+  u.id, u.email, u.password, u.name, u.coordinates, u.city, u.timezone, u.created_at, 
+  to_jsonb(s) AS subscription
+FROM "user" u
+LEFT JOIN subscription s ON s.user_id = u.id
+WHERE u.id = $1
 `
 
-func (q *Queries) SelectUser(ctx context.Context, id pgtype.UUID) (User, error) {
+type SelectUserRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	Email        string             `json:"email"`
+	Password     string             `json:"password"`
+	Name         string             `json:"name"`
+	Coordinates  pgtype.Point       `json:"coordinates"`
+	City         string             `json:"city"`
+	Timezone     string             `json:"timezone"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Subscription []byte             `json:"subscription"`
+}
+
+func (q *Queries) SelectUser(ctx context.Context, id pgtype.UUID) (SelectUserRow, error) {
 	row := q.db.QueryRow(ctx, selectUser, id)
-	var i User
+	var i SelectUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
@@ -453,6 +470,7 @@ func (q *Queries) SelectUser(ctx context.Context, id pgtype.UUID) (User, error) 
 		&i.City,
 		&i.Timezone,
 		&i.CreatedAt,
+		&i.Subscription,
 	)
 	return i, err
 }

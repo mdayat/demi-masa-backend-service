@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,10 +42,10 @@ func (u user) GetUser(res http.ResponseWriter, req *http.Request) {
 	logger := log.Ctx(ctx).With().Logger()
 
 	userId := ctx.Value(userIdKey{}).(string)
-	user, err := retryutil.RetryWithData(func() (repository.User, error) {
+	user, err := retryutil.RetryWithData(func() (repository.SelectUserRow, error) {
 		userUUID, err := uuid.Parse(userId)
 		if err != nil {
-			return repository.User{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
+			return repository.SelectUserRow{}, fmt.Errorf("failed to parse user Id to UUID: %w", err)
 		}
 
 		return u.configs.Db.Queries.SelectUser(ctx, pgtype.UUID{Bytes: userUUID, Valid: true})
@@ -61,15 +62,25 @@ func (u user) GetUser(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	var userSubscription *dtos.UserSubscription
+	if len(user.Subscription) != 0 {
+		if err := json.Unmarshal(user.Subscription, userSubscription); err != nil {
+			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to unmarshal user subscription")
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	resBody := dtos.UserResponse{
-		Id:        user.ID.String(),
-		Email:     user.Email,
-		Name:      user.Name,
-		Latitude:  user.Coordinates.P.Y,
-		Longitude: user.Coordinates.P.X,
-		City:      user.City,
-		Timezone:  user.Timezone,
-		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
+		Id:           user.ID.String(),
+		Email:        user.Email,
+		Name:         user.Name,
+		Latitude:     user.Coordinates.P.Y,
+		Longitude:    user.Coordinates.P.X,
+		City:         user.City,
+		Timezone:     user.Timezone,
+		CreatedAt:    user.CreatedAt.Time.Format(time.RFC3339),
+		Subscription: userSubscription,
 	}
 
 	params := httputil.SendSuccessResponseParams{

@@ -52,9 +52,6 @@ func NewRestHandler(configs configs.Configs, customMiddleware MiddlewareHandler)
 		r.Delete("/users/me", userHandler.DeleteUser)
 		r.Put("/users/me", userHandler.UpdateUser)
 
-		subscriptionHandler := NewSubscriptionHandler(configs)
-		r.Get("/subscriptions/active", subscriptionHandler.GetActiveSubscription)
-
 		prayerService := services.NewPrayerService(configs)
 		prayerHandler := NewPrayerHandler(configs, prayerService)
 		r.Get("/prayers", prayerHandler.GetPrayers)
