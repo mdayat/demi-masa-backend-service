@@ -2,7 +2,7 @@
 FROM alpine:3.21 AS base-alpine
 WORKDIR /app
 
-FROM golang:1.23.6-alpine3.21 AS base-go
+FROM golang:1.23.8-alpine3.21 AS base-go
 WORKDIR /app
 
 FROM base-go AS build
