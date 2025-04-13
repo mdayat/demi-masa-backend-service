@@ -64,7 +64,7 @@ func (u user) GetUser(res http.ResponseWriter, req *http.Request) {
 
 	var userSubscription *dtos.UserSubscription
 	if len(user.Subscription) != 0 {
-		if err := json.Unmarshal(user.Subscription, userSubscription); err != nil {
+		if err := json.Unmarshal(user.Subscription, &userSubscription); err != nil {
 			logger.Error().Err(err).Caller().Int("status_code", http.StatusInternalServerError).Msg("failed to unmarshal user subscription")
 			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
