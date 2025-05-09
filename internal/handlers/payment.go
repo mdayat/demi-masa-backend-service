@@ -138,7 +138,7 @@ func (p payment) CreateInvoice(res http.ResponseWriter, req *http.Request) {
 
 	totalAmount := reqBody.Plan.Price
 	if couponCode.Valid {
-		totalAmount = int(math.Round(float64(reqBody.Plan.Price) * 0.7))
+		totalAmount = int(math.Round(float64(reqBody.Plan.Price) * 0.8))
 	}
 
 	tripayTxRequest := p.service.CreateTripayTxRequest(services.CreateTripayTxRequestParams{
